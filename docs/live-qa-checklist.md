@@ -2,6 +2,32 @@
 
 Use this checklist for Vercel Preview, staging, and production verification after real Supabase and email credentials are configured.
 
+## Completed Phase 2C Live QA Result
+
+Date: 2026-07-09
+
+Live environment:
+
+- GitHub repo connected: `JinoFin/GlobalFlowa`
+- Vercel deployed: `https://globalflowa.vercel.app`
+- Supabase `schema.sql` applied successfully.
+- Supabase `seed.sql` applied successfully.
+- Admin Auth user and matching `profiles` row configured successfully.
+- Admin login works through `/admin/login`.
+- Admin request list and detail pages work.
+- Request submission works from the deployed site.
+- Supabase request persistence works.
+- Document checklist generation works.
+- Checklist status updates work in admin.
+- Email delivery works after Resend configuration was corrected.
+- File upload and secure file download work.
+- Uploaded files can be linked to document checklist items.
+
+Security note:
+
+- Secrets are stored only in Vercel, Supabase, and Resend configuration.
+- No API keys, service role keys, admin passwords, email provider secrets, or real customer-sensitive data are committed to this repository.
+
 ## Before QA
 
 - Confirm Vercel has all environment variables for the tested environment.

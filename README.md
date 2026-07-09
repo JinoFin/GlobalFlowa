@@ -16,6 +16,18 @@ Professional B2B website and service request portal for Globalflowa, a Germany m
 
 Phase 2A adds the automated document checklist. Phase 2B adds production/staging setup documentation, live QA guidance, and small runtime hardening for real deployments. Other Phase 2 items such as customer portal, customer status tracking, pricing calculator, and German/Chinese localization are intentionally not built yet.
 
+## Phase 2C live QA status
+
+Phase 2C staging/live QA passed on 2026-07-09.
+
+- GitHub repository: `JinoFin/GlobalFlowa`
+- Vercel deployment: `https://globalflowa.vercel.app`
+- Supabase schema and seed SQL applied successfully.
+- Admin login, request submission, persistence, document checklist generation, checklist updates, file upload/download, file-to-checklist linking, and email delivery were confirmed live.
+- Secrets are stored only in Vercel, Supabase, and Resend. No secrets are committed to this repository.
+
+See [docs/live-qa-checklist.md](docs/live-qa-checklist.md) for the completed live QA result and repeatable QA checklist.
+
 ## Phase 2A document checklist
 
 The portal now generates a request-specific document checklist from selected services, product details, service answers, and uploaded files.
