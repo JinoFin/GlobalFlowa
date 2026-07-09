@@ -114,6 +114,89 @@ values
   ('00000000-0000-4000-8000-000000000103', 'label_file', 'homecraft-fnsku-labels.pdf', 'request-documents', 'demo/warehouse-relabeling/homecraft-fnsku-labels.pdf'),
   ('00000000-0000-4000-8000-000000000103', 'other_files', 'homecraft-packing-list.xlsx', 'request-documents', 'demo/warehouse-relabeling/homecraft-packing-list.xlsx');
 
+with selected_templates as (
+  select
+    rs.request_id,
+    dt.id as document_template_id,
+    dt.document_key,
+    dt.title,
+    dt.description,
+    dt.category,
+    dt.required_by_default,
+    dt.sort_order,
+    case
+      when dt.document_key = 'test_reports' then (select id from public.request_files rf where rf.request_id = rs.request_id and rf.field_key = 'test_reports' limit 1)
+      when dt.document_key = 'label_photos' then (select id from public.request_files rf where rf.request_id = rs.request_id and rf.field_key = 'label_photos' limit 1)
+      when dt.document_key in ('founder_id', 'business_registration') then (select id from public.request_files rf where rf.request_id = rs.request_id and rf.field_key = 'other_files' limit 1)
+      when dt.document_key in ('label_file') then (select id from public.request_files rf where rf.request_id = rs.request_id and rf.field_key = 'label_file' limit 1)
+      when dt.document_key in ('packing_list', 'product_list') then (select id from public.request_files rf where rf.request_id = rs.request_id and rf.field_key = 'other_files' limit 1)
+      else null
+    end as linked_file_id
+  from public.request_services rs
+  join public.document_templates dt on dt.service_slug = rs.service_slug
+  where rs.request_id in (
+    '00000000-0000-4000-8000-000000000101',
+    '00000000-0000-4000-8000-000000000102',
+    '00000000-0000-4000-8000-000000000103'
+  )
+),
+deduped as (
+  select distinct on (request_id, document_key)
+    request_id,
+    document_template_id,
+    document_key,
+    title,
+    description,
+    category,
+    (
+      required_by_default
+      or (request_id = '00000000-0000-4000-8000-000000000101' and document_key in ('battery_info', 'declaration_of_conformity', 'test_reports', 'marketplace_notice', 'marketplace_link'))
+      or (request_id = '00000000-0000-4000-8000-000000000102' and document_key in ('vat_registration_info', 'marketplace_seller_info'))
+      or (request_id = '00000000-0000-4000-8000-000000000103' and document_key in ('relabeling_instructions', 'deadline_info'))
+    ) as required,
+    sort_order,
+    linked_file_id
+  from selected_templates
+  order by request_id, document_key, required_by_default desc, sort_order
+)
+insert into public.request_document_checklist
+  (request_id, document_template_id, document_key, title, description, category, status, admin_note, linked_file_id, required, sort_order)
+select
+  request_id,
+  document_template_id,
+  document_key,
+  title,
+  description,
+  category,
+  case
+    when linked_file_id is not null then 'uploaded'
+    when request_id = '00000000-0000-4000-8000-000000000102' and document_key in ('founder_address', 'desired_company_name') then 'missing'
+    when request_id = '00000000-0000-4000-8000-000000000101' and document_key = 'user_manual' then 'missing'
+    else 'required'
+  end,
+  case
+    when request_id = '00000000-0000-4000-8000-000000000101' and document_key = 'label_photos' then 'Linked demo label photos need review for readability.'
+    when request_id = '00000000-0000-4000-8000-000000000102' and document_key = 'founder_address' then 'Ask customer for a recent proof of residential address.'
+    when request_id = '00000000-0000-4000-8000-000000000103' and document_key = 'label_file' then 'Confirm this is the final FNSKU file before relabeling.'
+    else null
+  end,
+  linked_file_id,
+  required,
+  sort_order
+from deduped
+where required = true or linked_file_id is not null or document_key in ('existing_weee_number', 'case_id', 'packing_instructions')
+on conflict (request_id, document_key) do update set
+  document_template_id = excluded.document_template_id,
+  title = excluded.title,
+  description = excluded.description,
+  category = excluded.category,
+  status = excluded.status,
+  admin_note = excluded.admin_note,
+  linked_file_id = excluded.linked_file_id,
+  required = excluded.required,
+  sort_order = excluded.sort_order,
+  updated_at = now();
+
 insert into public.admin_notes (request_id, note, missing_documents)
 values
   ('00000000-0000-4000-8000-000000000101', 'Need the product manual and clearer manufacturer address before preparing the GPSR review.', '["User manual","Manufacturer address confirmation"]'::jsonb),

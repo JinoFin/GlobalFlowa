@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceBySlug } from "@/lib/catalog";
+import {
+  defaultDocumentTemplates,
+  generateDocumentChecklist,
+  type DocumentTemplate,
+  type UploadedFileSummary,
+} from "@/lib/document-checklist";
 import { sendRequestEmails } from "@/lib/email/send";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { requestPayloadSchema } from "@/lib/validation";
@@ -159,8 +165,9 @@ export async function POST(request: NextRequest) {
     uploadedFiles.push({ field, name: value.name, path });
   }
 
+  let savedFiles: UploadedFileSummary[] = [];
   if (uploadedFiles.length > 0) {
-    const { error } = await supabase.from("request_files").insert(
+    const { data, error } = await supabase.from("request_files").insert(
       uploadedFiles.map((file) => ({
         request_id: submissionId,
         field_key: file.field,
@@ -168,9 +175,47 @@ export async function POST(request: NextRequest) {
         storage_bucket: "request-documents",
         storage_path: file.path,
       })),
-    );
+    ).select("id, field_key, file_name, storage_path");
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    savedFiles = (data ?? []).map((file) => ({
+      id: file.id,
+      field: file.field_key,
+      name: file.file_name,
+      path: file.storage_path,
+    }));
+  }
+
+  const templates = await loadDocumentTemplatesForRequest(supabase, payload.selectedServices);
+  const checklistItems = generateDocumentChecklist({
+    selectedServices: payload.selectedServices,
+    payload,
+    templates,
+    uploadedFiles: savedFiles,
+  });
+
+  if (checklistItems.length > 0) {
+    const { error } = await supabase.from("request_document_checklist").insert(
+      checklistItems.map((item) => ({
+        request_id: submissionId,
+        document_template_id: item.document_template_id,
+        document_key: item.document_key,
+        title: item.title,
+        description: item.description,
+        category: item.category,
+        status: item.status,
+        admin_note: item.admin_note,
+        customer_note: item.customer_note,
+        linked_file_id: item.linked_file_id,
+        required: item.required,
+        sort_order: item.sort_order,
+      })),
+    );
+
+    if (error) {
+      console.error("Document checklist persistence failed", error);
     }
   }
 
@@ -178,11 +223,14 @@ export async function POST(request: NextRequest) {
     request_id: submissionId,
     action: "submitted",
     actor_type: "customer",
-    details: { selected_services: payload.selectedServices },
+    details: {
+      selected_services: payload.selectedServices,
+      checklist_items: checklistItems.length,
+    },
   });
 
   try {
-    await sendRequestEmails({ payload, submissionId, uploadedFiles });
+    await sendRequestEmails({ payload, submissionId, uploadedFiles, checklistItems });
   } catch (error) {
     console.error("Request email failed", error);
   }
@@ -210,4 +258,27 @@ function isRateLimited(ip: string) {
   current.count += 1;
   attempts.set(ip, current);
   return current.count > rateLimitMax;
+}
+
+async function loadDocumentTemplatesForRequest(
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
+  selectedServices: string[],
+) {
+  const { data, error } = await supabase
+    .from("document_templates")
+    .select("*")
+    .in("service_slug", selectedServices)
+    .eq("is_active", true)
+    .order("sort_order");
+
+  if (error || !data?.length) {
+    if (error) {
+      console.error("Document template load failed; using local defaults", error);
+    }
+    return defaultDocumentTemplates.filter((template) =>
+      selectedServices.includes(template.service_slug),
+    );
+  }
+
+  return data as DocumentTemplate[];
 }

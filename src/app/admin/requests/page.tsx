@@ -24,6 +24,7 @@ type RequestRow = {
   email: string;
   main_service: string | null;
   request_services?: Array<{ service_name: string; service_slug: string }>;
+  request_document_checklist?: Array<{ status: string; required: boolean }>;
 };
 
 export default async function AdminRequestsPage({ searchParams }: AdminRequestsPageProps) {
@@ -43,7 +44,7 @@ export default async function AdminRequestsPage({ searchParams }: AdminRequestsP
 
   let query = supabase
     .from("service_requests")
-    .select("id, created_at, status, urgency, country, company_name, contact_person, email, main_service, request_services(service_name, service_slug)")
+    .select("id, created_at, status, urgency, country, company_name, contact_person, email, main_service, request_services(service_name, service_slug), request_document_checklist(status, required)")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -121,26 +122,45 @@ export default async function AdminRequestsPage({ searchParams }: AdminRequestsP
                     <th className="px-4 py-3">Company</th>
                     <th className="px-4 py-3">Service</th>
                     <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Checklist</th>
                     <th className="px-4 py-3">Urgency</th>
                     <th className="px-4 py-3">Country</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-navy-100">
-                  {filteredRows.map((row) => (
-                    <tr key={row.id} className="hover:bg-navy-50">
-                      <td className="px-4 py-3 text-navy-650">{new Date(row.created_at).toLocaleDateString()}</td>
-                      <td className="px-4 py-3">
-                        <Link href={`/admin/requests/${row.id}`} className="font-semibold text-navy-950 hover:text-teal-700">
-                          {row.company_name}
-                        </Link>
-                        <p className="text-xs text-navy-650">{row.contact_person} · {row.email}</p>
-                      </td>
-                      <td className="px-4 py-3 text-navy-650">{row.main_service}</td>
-                      <td className="px-4 py-3"><span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">{row.status}</span></td>
-                      <td className="px-4 py-3 text-navy-650">{row.urgency}</td>
-                      <td className="px-4 py-3 text-navy-650">{row.country}</td>
-                    </tr>
-                  ))}
+                  {filteredRows.map((row) => {
+                    const checklistSummary = getChecklistSummary(row.request_document_checklist ?? []);
+                    return (
+                      <tr key={row.id} className="hover:bg-navy-50">
+                        <td className="px-4 py-3 text-navy-650">{new Date(row.created_at).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">
+                          <Link href={`/admin/requests/${row.id}`} className="font-semibold text-navy-950 hover:text-teal-700">
+                            {row.company_name}
+                          </Link>
+                          <p className="text-xs text-navy-650">{row.contact_person} · {row.email}</p>
+                        </td>
+                        <td className="px-4 py-3 text-navy-650">{row.main_service}</td>
+                        <td className="px-4 py-3"><span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">{row.status}</span></td>
+                        <td className="px-4 py-3 text-navy-650">
+                          {checklistSummary.total ? (
+                            <div>
+                              <span className="font-semibold text-navy-950">{checklistSummary.percent}%</span>
+                              <span className="ml-2 text-xs">{checklistSummary.accepted}/{checklistSummary.total}</span>
+                              {checklistSummary.attention ? (
+                                <span className="mt-1 block text-xs font-semibold text-red-700">
+                                  {checklistSummary.attention} attention
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-xs">No checklist</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-navy-650">{row.urgency}</td>
+                        <td className="px-4 py-3 text-navy-650">{row.country}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -149,6 +169,19 @@ export default async function AdminRequestsPage({ searchParams }: AdminRequestsP
       </div>
     </div>
   );
+}
+
+function getChecklistSummary(items: Array<{ status: string; required: boolean }>) {
+  const requiredItems = items.filter((item) => item.required);
+  const accepted = requiredItems.filter((item) => item.status === "accepted").length;
+  const attention = requiredItems.filter((item) =>
+    ["missing", "incorrect", "expired"].includes(item.status),
+  ).length;
+  const percent = requiredItems.length
+    ? Math.round((accepted / requiredItems.length) * 100)
+    : 0;
+
+  return { total: requiredItems.length, accepted, attention, percent };
 }
 
 function AdminConfigNotice({ message }: { message: string }) {

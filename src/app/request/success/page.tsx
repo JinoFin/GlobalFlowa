@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
+import { RequestSuccessChecklist } from "@/components/request-success-checklist";
 
 export const metadata = {
   title: "Request Submitted",
@@ -27,6 +28,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
             Submission ID: {id}
           </p>
         ) : null}
+        <RequestSuccessChecklist />
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Link href="/" className="rounded-md bg-navy-950 px-5 py-3 text-sm font-semibold text-white">
             Back to home

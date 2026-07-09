@@ -4,6 +4,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, FileUp } from "lucide-react";
 import { services, type QuestionType, type ServiceQuestion } from "@/lib/catalog";
+import {
+  generateDocumentChecklist,
+  getDefaultDocumentTemplatesForServices,
+  groupChecklistByCategory,
+} from "@/lib/document-checklist";
+import type { RequestPayload } from "@/lib/validation";
 
 type Answers = Record<string, string | string[]>;
 type FilesByKey = Record<string, File[]>;
@@ -120,30 +126,7 @@ export function RequestForm() {
     setStage("submitting");
     setSubmitError(null);
 
-    const serviceAnswers: Record<string, Answers> = {};
-    for (const service of selectedServiceObjects) {
-      if (!service) continue;
-      serviceAnswers[service.slug] = {};
-      for (const question of service.questions) {
-        const answerKey = `${service.slug}.${question.key}`;
-        if (answers[answerKey]) {
-          serviceAnswers[service.slug][question.key] = answers[answerKey];
-        }
-      }
-    }
-
-    const payload = {
-      customer: pickAnswers(generalCustomerFields, answers),
-      product: pickAnswers(productFields.filter((field) => field.type !== "file"), answers),
-      selectedServices,
-      serviceAnswers,
-      fileFields: Object.fromEntries(
-        Object.entries(files).map(([key, selectedFiles]) => [
-          key,
-          selectedFiles.map((file) => ({ name: file.name, size: file.size, type: file.type })),
-        ]),
-      ),
-    };
+    const payload = buildRequestPayload(answers, files, selectedServices);
 
     const formData = new FormData();
     formData.append("payload", JSON.stringify(payload));
@@ -164,6 +147,21 @@ export function RequestForm() {
         throw new Error(result.error ?? "Submission failed.");
       }
 
+      const checklistSummary = generateDocumentChecklist({
+        selectedServices,
+        payload,
+        templates: getDefaultDocumentTemplatesForServices(selectedServices),
+        uploadedFiles: Object.entries(files).flatMap(([field, selectedFiles]) =>
+          selectedFiles.map((file) => ({ field, name: file.name })),
+        ),
+      })
+        .filter((item) => item.required)
+        .map((item) => ({ category: item.category, title: item.title }));
+
+      window.sessionStorage.setItem(
+        "globalflowa.lastChecklist",
+        JSON.stringify(checklistSummary),
+      );
       window.localStorage.removeItem(draftKey);
       window.localStorage.removeItem(selectedServicesKey);
       router.push(`/request/success?id=${result.submissionId ?? ""}`);
@@ -483,6 +481,18 @@ function Confirmation({
   const selectedServiceNames = selectedServices
     .map((slug) => services.find((service) => service.slug === slug)?.name)
     .filter(Boolean);
+  const payload = buildRequestPayload(answers, files, selectedServices);
+  const uploadedFiles = Object.entries(files).flatMap(([field, selectedFiles]) =>
+    selectedFiles.map((file) => ({ field, name: file.name })),
+  );
+  const checklistPreview = generateDocumentChecklist({
+    selectedServices,
+    payload,
+    templates: getDefaultDocumentTemplatesForServices(selectedServices),
+    uploadedFiles,
+  });
+  const requiredPreview = checklistPreview.filter((item) => item.required).slice(0, 12);
+  const recommendedCount = checklistPreview.filter((item) => !item.required).length;
 
   return (
     <div className="space-y-8 p-5 sm:p-8">
@@ -497,6 +507,7 @@ function Confirmation({
       <SummaryBlock title="Customer details" rows={pickAnswers(generalCustomerFields, answers)} />
       <SummaryBlock title="Product information" rows={pickAnswers(productFields.filter((field) => field.type !== "file"), answers)} />
       <SummaryBlock title="Selected services" rows={{ services: selectedServiceNames.join(", ") }} />
+      <ChecklistPreview items={requiredPreview} recommendedCount={recommendedCount} />
       <SummaryBlock
         title="Uploaded documents"
         rows={Object.fromEntries(
@@ -526,6 +537,50 @@ function Confirmation({
         </button>
       </div>
     </div>
+  );
+}
+
+function ChecklistPreview({
+  items,
+  recommendedCount,
+}: {
+  items: ReturnType<typeof generateDocumentChecklist>;
+  recommendedCount: number;
+}) {
+  return (
+    <section className="rounded-md border border-navy-100 bg-white p-5">
+      <h3 className="font-semibold text-navy-950">Document checklist preview</h3>
+      <p className="mt-2 text-sm leading-6 text-navy-650">
+        Based on your selected services, these documents may be required. Our
+        team will review your uploaded documents and contact you if anything is
+        missing or needs correction.
+      </p>
+      {items.length > 0 ? (
+        <div className="mt-4 space-y-4">
+          {groupChecklistByCategory(items).map((group) => (
+            <div key={group.category}>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">
+                {group.category}
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-navy-650">
+                {group.items.map((item) => (
+                  <li key={item.document_key}>- {item.title}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {recommendedCount > 0 ? (
+            <p className="rounded-md bg-navy-50 px-3 py-2 text-xs text-navy-650">
+              {recommendedCount} additional recommended document{recommendedCount === 1 ? "" : "s"} may be confirmed during review.
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-navy-650">
+          Globalflowa will confirm the exact document list after reviewing your request.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -563,6 +618,34 @@ function pickAnswers(fields: ServiceQuestion[], answers: Answers) {
       .map((field) => [field.key, answers[field.key] ?? ""])
       .filter(([, value]) => (Array.isArray(value) ? value.length > 0 : Boolean(value))),
   ) as Record<string, string | string[]>;
+}
+
+function buildRequestPayload(answers: Answers, files: FilesByKey, selectedServices: string[]): RequestPayload {
+  const serviceAnswers: Record<string, Answers> = {};
+  for (const serviceSlug of selectedServices) {
+    const service = services.find((item) => item.slug === serviceSlug);
+    if (!service) continue;
+    serviceAnswers[service.slug] = {};
+    for (const question of service.questions) {
+      const answerKey = `${service.slug}.${question.key}`;
+      if (answers[answerKey]) {
+        serviceAnswers[service.slug][question.key] = answers[answerKey];
+      }
+    }
+  }
+
+  return {
+    customer: pickAnswers(generalCustomerFields, answers),
+    product: pickAnswers(productFields.filter((field) => field.type !== "file"), answers),
+    selectedServices,
+    serviceAnswers,
+    fileFields: Object.fromEntries(
+      Object.entries(files).map(([key, selectedFiles]) => [
+        key,
+        selectedFiles.map((file) => ({ name: file.name, size: file.size, type: file.type })),
+      ]),
+    ),
+  } as RequestPayload;
 }
 
 function loadSavedRequestState(preselectedService: string | null) {

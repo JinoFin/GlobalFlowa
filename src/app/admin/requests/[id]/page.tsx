@@ -1,5 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import {
+  DocumentChecklistSection,
+  type AdminChecklistItem,
+  type AdminFileOption,
+} from "@/components/admin/document-checklist-section";
 import { RequestActions } from "@/components/admin/request-actions";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 
@@ -73,12 +78,13 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
     redirect("/admin/login");
   }
 
-  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: notes }, { data: activity }] =
+  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }] =
     await Promise.all([
       supabase.from("service_requests").select("*").eq("id", id).single(),
       supabase.from("request_services").select("service_name, service_slug").eq("request_id", id),
       supabase.from("request_answers").select("*").eq("request_id", id).order("created_at"),
       supabase.from("request_files").select("*").eq("request_id", id).order("created_at"),
+      supabase.from("request_document_checklist").select("*").eq("request_id", id).order("sort_order"),
       supabase.from("admin_notes").select("*").eq("request_id", id).order("created_at", { ascending: false }),
       supabase.from("request_activity_log").select("*").eq("request_id", id).order("created_at", { ascending: false }),
     ]);
@@ -132,6 +138,11 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
 
             <AnswersSection answers={(answers ?? []) as AnswerRow[]} />
             <FilesSection files={(files ?? []) as FileRow[]} />
+            <DocumentChecklistSection
+              requestId={requestRow.id}
+              initialItems={(checklist ?? []) as AdminChecklistItem[]}
+              files={(files ?? []) as AdminFileOption[]}
+            />
             <NotesSection notes={(notes ?? []) as NoteRow[]} />
             <ActivitySection activity={(activity ?? []) as ActivityRow[]} />
           </div>

@@ -92,6 +92,43 @@ create table if not exists public.request_files (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.document_templates (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  service_slug text not null references public.services(slug) on delete cascade,
+  title text not null,
+  description text not null,
+  document_key text not null,
+  category text not null check (category in ('Company Documents', 'Product Documents', 'Compliance Documents', 'Marketplace Documents', 'Warehouse Documents', 'Tax / VAT Documents', 'Other')),
+  required_by_default boolean not null default true,
+  conditional_rule jsonb,
+  accepted_file_types text[],
+  example_description text,
+  sort_order int not null default 0,
+  is_active boolean not null default true,
+  unique (service_slug, document_key)
+);
+
+create table if not exists public.request_document_checklist (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  request_id uuid not null references public.service_requests(id) on delete cascade,
+  document_template_id uuid references public.document_templates(id) on delete set null,
+  document_key text not null,
+  title text not null,
+  description text not null,
+  category text not null check (category in ('Company Documents', 'Product Documents', 'Compliance Documents', 'Marketplace Documents', 'Warehouse Documents', 'Tax / VAT Documents', 'Other')),
+  status text not null default 'required' check (status in ('required', 'uploaded', 'under_review', 'accepted', 'missing', 'incorrect', 'expired', 'not_applicable')),
+  admin_note text,
+  customer_note text,
+  linked_file_id uuid references public.request_files(id) on delete set null,
+  required boolean not null default true,
+  sort_order int not null default 0,
+  unique (request_id, document_key)
+);
+
 create table if not exists public.recommendation_sessions (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -133,6 +170,9 @@ create index if not exists idx_service_requests_country on public.service_reques
 create index if not exists idx_request_services_request_id on public.request_services(request_id);
 create index if not exists idx_request_answers_request_id on public.request_answers(request_id);
 create index if not exists idx_request_files_request_id on public.request_files(request_id);
+create index if not exists idx_document_templates_service_slug on public.document_templates(service_slug);
+create index if not exists idx_request_document_checklist_request_id on public.request_document_checklist(request_id);
+create index if not exists idx_request_document_checklist_status on public.request_document_checklist(status);
 
 alter table public.profiles enable row level security;
 alter table public.services enable row level security;
@@ -141,6 +181,8 @@ alter table public.service_requests enable row level security;
 alter table public.request_services enable row level security;
 alter table public.request_answers enable row level security;
 alter table public.request_files enable row level security;
+alter table public.document_templates enable row level security;
+alter table public.request_document_checklist enable row level security;
 alter table public.recommendation_sessions enable row level security;
 alter table public.recommendation_answers enable row level security;
 alter table public.admin_notes enable row level security;
@@ -153,6 +195,8 @@ grant select, insert, update, delete on public.service_requests to authenticated
 grant select, insert, update, delete on public.request_services to authenticated;
 grant select, insert, update, delete on public.request_answers to authenticated;
 grant select, insert, update, delete on public.request_files to authenticated;
+grant select, insert, update, delete on public.document_templates to authenticated;
+grant select, insert, update, delete on public.request_document_checklist to authenticated;
 grant select, insert, update, delete on public.recommendation_sessions to authenticated;
 grant select, insert, update, delete on public.recommendation_answers to authenticated;
 grant select, insert, update, delete on public.admin_notes to authenticated;
@@ -212,6 +256,18 @@ with check (exists (select 1 from public.profiles p where p.id = (select auth.ui
 
 create policy "Admins can manage request files"
 on public.request_files for all
+to authenticated
+using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
+with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+
+create policy "Admins can manage document templates"
+on public.document_templates for all
+to authenticated
+using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
+with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+
+create policy "Admins can manage request document checklist"
+on public.request_document_checklist for all
 to authenticated
 using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
 with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
