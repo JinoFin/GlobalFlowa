@@ -39,8 +39,12 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
     .single();
 
   if (fileError || !fileRow) {
+    console.error("Admin file lookup failed", {
+      fileId: id,
+      reason: fileError?.message ?? "missing file row",
+    });
     return NextResponse.json(
-      { error: fileError?.message ?? "File not found." },
+      { error: "File not found or unavailable." },
       { status: 404 },
     );
   }
@@ -61,8 +65,13 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
     .createSignedUrl(file.storage_path, 60);
 
   if (error || !data?.signedUrl) {
+    console.error("Admin signed file URL creation failed", {
+      fileId: id,
+      bucket: file.storage_bucket,
+      reason: error?.message ?? "missing signed URL",
+    });
     return NextResponse.json(
-      { error: error?.message ?? "Could not create signed file URL." },
+      { error: "Could not create a secure file download link." },
       { status: 500 },
     );
   }

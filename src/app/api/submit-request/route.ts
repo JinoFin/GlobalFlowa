@@ -7,6 +7,7 @@ import {
   type UploadedFileSummary,
 } from "@/lib/document-checklist";
 import { sendRequestEmails } from "@/lib/email/send";
+import { getMissingEnvironmentVariables } from "@/lib/env";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { requestPayloadSchema } from "@/lib/validation";
 
@@ -63,6 +64,13 @@ export async function POST(request: NextRequest) {
           error instanceof Error
             ? error.message
             : "Supabase is not configured for request submission.",
+        missing: getMissingEnvironmentVariables("server").filter((key) =>
+          ["SUPABASE_SERVICE_ROLE_KEY"].includes(key),
+        ).concat(
+          getMissingEnvironmentVariables("public").filter((key) =>
+            ["NEXT_PUBLIC_SUPABASE_URL"].includes(key),
+          ),
+        ),
       },
       { status: 503 },
     );
@@ -96,8 +104,11 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (requestError || !requestRow) {
+    console.error("Request persistence failed", {
+      reason: requestError?.message ?? "missing request row",
+    });
     return NextResponse.json(
-      { error: requestError?.message ?? "Could not create service request." },
+      { error: "Could not create service request. Please try again or contact Globalflowa." },
       { status: 500 },
     );
   }
@@ -112,7 +123,14 @@ export async function POST(request: NextRequest) {
   if (serviceRows.length > 0) {
     const { error } = await supabase.from("request_services").insert(serviceRows);
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Request services persistence failed", {
+        submissionId,
+        reason: error.message,
+      });
+      return NextResponse.json(
+        { error: "Could not save selected services. Please contact Globalflowa with your submission details." },
+        { status: 500 },
+      );
     }
   }
 
@@ -138,7 +156,14 @@ export async function POST(request: NextRequest) {
   if (answerRows.length > 0) {
     const { error } = await supabase.from("request_answers").insert(answerRows);
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Request answers persistence failed", {
+        submissionId,
+        reason: error.message,
+      });
+      return NextResponse.json(
+        { error: "Could not save request answers. Please contact Globalflowa with your submission details." },
+        { status: 500 },
+      );
     }
   }
 
@@ -159,7 +184,15 @@ export async function POST(request: NextRequest) {
       });
 
     if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+      console.error("Request file upload failed", {
+        submissionId,
+        field,
+        reason: uploadError.message,
+      });
+      return NextResponse.json(
+        { error: "Could not upload one of the documents. Please try again." },
+        { status: 500 },
+      );
     }
 
     uploadedFiles.push({ field, name: value.name, path });
@@ -177,7 +210,14 @@ export async function POST(request: NextRequest) {
       })),
     ).select("id, field_key, file_name, storage_path");
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Request file metadata persistence failed", {
+        submissionId,
+        reason: error.message,
+      });
+      return NextResponse.json(
+        { error: "Documents were uploaded but file metadata could not be saved. Please contact Globalflowa." },
+        { status: 500 },
+      );
     }
 
     savedFiles = (data ?? []).map((file) => ({

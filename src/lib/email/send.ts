@@ -36,20 +36,21 @@ export async function sendRequestEmails({
   }
 
   const internalEmail = process.env.INTERNAL_NOTIFICATION_EMAIL ?? "info@globalflowa.com";
+  const fromEmail = process.env.EMAIL_FROM ?? "Globalflowa Portal <onboarding@resend.dev>";
   const mainService =
     getServiceBySlug(payload.selectedServices[0] ?? "")?.name ?? "Service Request";
   const companyName = payload.customer.company_name;
   const subject = `New Globalflowa Request - ${mainService} - ${companyName}`;
 
   await resend.emails.send({
-    from: "Globalflowa Portal <onboarding@resend.dev>",
+    from: fromEmail,
     to: internalEmail,
     subject,
     text: buildInternalEmail(payload, submissionId, uploadedFiles, checklistItems),
   });
 
   await resend.emails.send({
-    from: "Globalflowa Portal <onboarding@resend.dev>",
+    from: fromEmail,
     to: payload.customer.email,
     subject: "Globalflowa received your request",
     text: buildCustomerEmail(submissionId, checklistItems),

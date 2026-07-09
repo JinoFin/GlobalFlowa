@@ -1,4 +1,4 @@
-# Globalflowa Phase 1 MVP + Phase 2A Document Checklist
+# Globalflowa MVP + Phase 2A/2B Readiness
 
 Professional B2B website and service request portal for Globalflowa, a Germany market-entry, compliance, warehouse, labeling, packing, and marketplace preparation partner for foreign sellers.
 
@@ -14,7 +14,7 @@ Professional B2B website and service request portal for Globalflowa, a Germany m
 - Basic Supabase Auth admin dashboard
 - Request list, filters, detail view, status updates, internal notes, missing-document marking, assignment field, activity history, and CSV export
 
-Phase 2A adds the automated document checklist. Other Phase 2 items such as customer portal, customer status tracking, pricing calculator, and German/Chinese localization are intentionally not built yet.
+Phase 2A adds the automated document checklist. Phase 2B adds production/staging setup documentation, live QA guidance, and small runtime hardening for real deployments. Other Phase 2 items such as customer portal, customer status tracking, pricing calculator, and German/Chinese localization are intentionally not built yet.
 
 ## Phase 2A document checklist
 
@@ -62,6 +62,38 @@ Checklist categories:
 - Resend-compatible email sending
 - Vercel-ready deployment structure
 
+## Environment variables
+
+Copy `.env.example` to `.env.local` for local development. In Vercel, set the same keys in Project Settings -> Environment Variables for Preview and Production.
+
+Public client-side variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+Server-only variables:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=
+EMAIL_PROVIDER_API_KEY=
+INTERNAL_NOTIFICATION_EMAIL=info@globalflowa.com
+EMAIL_FROM="Globalflowa Portal <onboarding@resend.dev>"
+```
+
+Environment notes:
+
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are safe browser configuration values from Supabase.
+- `NEXT_PUBLIC_SITE_URL` should be `http://localhost:3000` locally, the Vercel Preview URL for staging checks when needed, and the production domain in Production.
+- `SUPABASE_SERVICE_ROLE_KEY` is server-only and must never be exposed in browser code or committed to source control.
+- `EMAIL_PROVIDER_API_KEY` is the Resend API key.
+- `INTERNAL_NOTIFICATION_EMAIL` receives structured internal request notifications.
+- `EMAIL_FROM` must use a verified sender/domain before production launch. The `onboarding@resend.dev` placeholder is only suitable for early setup tests.
+
+Local development variables live in `.env.local`. Vercel Preview and Production variables should be set in the Vercel dashboard or with `vercel env add`. Re-pull local variables with `vercel env pull .env.local --yes` after changing Vercel settings.
+
 ## Local setup
 
 ```bash
@@ -70,32 +102,53 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Set these variables in `.env.local`:
+Minimum local UI-only testing can run without Supabase and email values, but real request persistence, file upload, admin request detail, checklist persistence, and email delivery require real credentials.
+
+Useful local environment check:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-EMAIL_PROVIDER_API_KEY=
-INTERNAL_NOTIFICATION_EMAIL=info@globalflowa.com
+while IFS='=' read -r key _; do
+  [[ -z "$key" || "$key" == \#* ]] && continue
+  grep -q "^${key}=" .env.local || echo "Missing in .env.local: $key"
+done < .env.example
 ```
-
-`EMAIL_PROVIDER_API_KEY` is implemented with Resend. The current sender is `Globalflowa Portal <onboarding@resend.dev>` for setup simplicity; replace it with a verified production sender domain before launch.
 
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Open the SQL editor.
-3. Run `supabase/schema.sql`.
-4. Run `supabase/seed.sql`.
-5. Optional for QA and demos: run `supabase/demo-data.sql`.
-6. Create at least one Supabase Auth user for the admin.
-7. Add a matching `profiles` row:
+2. Copy the Project URL into `NEXT_PUBLIC_SUPABASE_URL`.
+3. Copy the anon/public key into `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+4. Copy the service role key into `SUPABASE_SERVICE_ROLE_KEY`. Keep this server-only.
+5. Open the SQL editor.
+6. Run `supabase/schema.sql`.
+7. Run `supabase/seed.sql`.
+8. Optional for QA and demos: run `supabase/demo-data.sql`.
+9. Confirm all public tables have RLS enabled in Authentication -> Policies or Database -> Tables.
+10. Confirm active service catalog rows are publicly readable and request/admin tables are restricted to authenticated `admin`/`team` profiles.
+11. Confirm the private storage bucket exists:
+
+```text
+request-documents
+```
+
+12. Confirm the bucket is private, not public.
+13. Create at least one Supabase Auth user for the admin.
+14. Add a matching `profiles` row:
 
 ```sql
 insert into public.profiles (id, email, full_name, role)
 values ('AUTH_USER_UUID', 'admin@example.com', 'Admin User', 'admin');
 ```
+
+15. Add the local and Vercel app URLs to Supabase Auth URL settings:
+
+```text
+http://localhost:3000
+https://your-preview-url.vercel.app
+https://your-production-domain.com
+```
+
+16. Visit `/admin/login`, sign in with the admin user, and confirm `/admin/requests` opens.
 
 The schema enables RLS on public tables, grants read access to active service catalog data, and restricts request/admin data to authenticated users with `profiles.role` of `admin` or `team`. Public customer submissions go through the server API route using the service role key.
 
@@ -148,6 +201,13 @@ The route:
 
 If Supabase environment variables are missing, the API returns a graceful JSON setup error instead of crashing the app. Real persistence, file storage, email delivery, and admin detail verification require real Supabase and email environment variables.
 
+Production diagnostics:
+
+- Public API errors are intentionally generic and do not expose Supabase provider details, stack traces, service-role keys, or email API keys.
+- Server logs include non-secret failure reasons and submission IDs where available.
+- If request persistence succeeds but email sending fails, the saved request remains available in Supabase/admin.
+- If checklist template loading fails, the submit route falls back to local default templates and logs the template load issue.
+
 Internal email subject format:
 
 ```text
@@ -155,6 +215,31 @@ New Globalflowa Request - [Main Service] - [Company Name]
 ```
 
 Internal emails include a “Generated Document Checklist” section grouped by required documents, conditional/recommended documents, and automatically detected uploaded documents. Customer confirmation emails include a shorter grouped list of likely required documents.
+
+## Email provider setup
+
+Email sending is implemented with Resend through `EMAIL_PROVIDER_API_KEY`.
+
+Setup:
+
+1. Create or open a Resend account.
+2. Verify the sending domain for production, for example `globalflowa.com`.
+3. Set `EMAIL_FROM` to a verified sender, for example:
+
+```bash
+EMAIL_FROM="Globalflowa Portal <portal@globalflowa.com>"
+```
+
+4. Set `INTERNAL_NOTIFICATION_EMAIL=info@globalflowa.com` or the operational inbox Globalflowa wants to monitor.
+5. Submit a real staging request and confirm both emails are delivered:
+   - Internal structured request email to `INTERNAL_NOTIFICATION_EMAIL`.
+   - Customer confirmation email to the submitted customer email.
+
+Graceful failure behavior:
+
+- If `EMAIL_PROVIDER_API_KEY` is missing, the app logs that email is not configured and still returns a successful submission after persistence.
+- If Resend returns an error after persistence, the app logs the email failure and keeps the saved request, files, answers, checklist, and activity log.
+- Email failure should be handled operationally from logs and admin dashboard data; customers may not receive confirmation until email is configured correctly.
 
 ## Admin dashboard
 
@@ -228,7 +313,8 @@ Use this checklist before moving to Phase 2:
 ## Environment verification notes
 
 - Live Supabase verification requires `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
-- Live email verification requires `EMAIL_PROVIDER_API_KEY` and a production-ready verified sender.
+- Live email verification requires `EMAIL_PROVIDER_API_KEY`, `INTERNAL_NOTIFICATION_EMAIL`, and production-ready `EMAIL_FROM`.
+- Live URL-sensitive verification should set `NEXT_PUBLIC_SITE_URL` to the currently tested local, Preview, or Production URL.
 - If those variables are missing, the public site, checker, request UI, and admin setup screens can still be reviewed locally, but persistence, email delivery, private file storage, and authenticated admin request details cannot be proven end to end.
 - After environment setup, test a real request with at least one uploaded file, confirm the row exists in Supabase, confirm internal/customer emails are delivered, and open the request in `/admin/requests/[id]`.
 - If Playwright browser binaries are unavailable locally, use the route smoke checks and then run visual/mobile QA in a normal browser or CI environment with browser binaries installed.
@@ -237,10 +323,17 @@ Use this checklist before moving to Phase 2:
 
 1. Push the repository to GitHub.
 2. Import the project into Vercel.
-3. Add the environment variables from `.env.example`.
-4. Deploy.
-5. Confirm Supabase Auth redirect URLs include the Vercel production domain.
-6. Replace the email sender with a verified production sender domain.
+3. Connect the GitHub repository to the Vercel project.
+4. Add every variable from `.env.example` in Vercel Project Settings -> Environment Variables.
+5. Scope variables to Preview and Production. Use staging Supabase/Resend values for Preview if available.
+6. Set `NEXT_PUBLIC_SITE_URL` to the tested Preview URL for staging checks and to the final production domain in Production.
+7. Keep `SUPABASE_SERVICE_ROLE_KEY` and `EMAIL_PROVIDER_API_KEY` server-only. Do not add `NEXT_PUBLIC_` to secret names.
+8. Confirm the build command is `npm run build`.
+9. Deploy a Preview build.
+10. Run the live QA checklist against the Preview URL.
+11. Confirm Supabase Auth URL settings include the Preview URL and production domain.
+12. Promote the validated Preview deployment or deploy Production from `main`.
+13. Run the live QA checklist again against the production URL.
 
 Build command:
 
@@ -248,11 +341,56 @@ Build command:
 npm run build
 ```
 
+The current project build script runs `next build --webpack`. This is intentional for now because Turbopack attempted to bind a sandbox-blocked helper port during local verification. Vercel should use the `npm run build` script unless the build environment is explicitly updated and re-verified with Turbopack.
+
 Start command:
 
 ```bash
 npm run start
 ```
+
+Optional Vercel CLI flow:
+
+```bash
+vercel link
+vercel env pull .env.local --yes
+npm run build
+vercel deploy
+vercel deploy --prod
+```
+
+## Real environment test instructions
+
+Local with real credentials:
+
+1. Copy `.env.example` to `.env.local`.
+2. Fill in real Supabase, Resend, internal email, sender, and site URL values.
+3. Run `npm run dev`.
+4. Submit a request with at least one uploaded file.
+5. Confirm the request, answers, files, checklist, and activity log exist in Supabase.
+6. Confirm emails are delivered.
+7. Log in as admin and verify detail, file download, checklist status updates, file linking, request status update, admin notes, and CSV export.
+
+Vercel Preview:
+
+1. Add Preview environment variables.
+2. Deploy Preview.
+3. Add the Preview URL to Supabase Auth URL settings if needed.
+4. Run `docs/live-qa-checklist.md` against the Preview URL.
+5. Confirm Vercel function logs show no unexpected submit, auth, storage, or email errors.
+
+Production:
+
+1. Add Production environment variables.
+2. Use the verified production email sender in `EMAIL_FROM`.
+3. Add the production domain to Supabase Auth URL settings.
+4. Deploy or promote after Preview QA passes.
+5. Submit one low-risk production test request and delete/archive it afterward if desired.
+6. Confirm internal operations know where request emails arrive and how to access `/admin/requests`.
+
+## Live QA checklist
+
+Use [docs/live-qa-checklist.md](docs/live-qa-checklist.md) for staging and production acceptance. It covers customer workflow, admin workflow, data workflow, the three required sample flows, and pass criteria.
 
 ## Useful commands
 
