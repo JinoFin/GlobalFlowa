@@ -5,7 +5,7 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   full_name text,
-  role text not null default 'admin' check (role in ('admin', 'team')),
+  role text not null default 'customer' check (role in ('admin', 'team', 'customer')),
   email text
 );
 
@@ -61,7 +61,10 @@ create table if not exists public.service_requests (
   message text,
   source text default 'website',
   assigned_to uuid references public.profiles(id),
-  internal_notes text
+  internal_notes text,
+  customer_user_id uuid references auth.users(id),
+  customer_email text,
+  customer_access_enabled boolean not null default true
 );
 
 create table if not exists public.request_services (
@@ -87,8 +90,14 @@ create table if not exists public.request_files (
   request_id uuid not null references public.service_requests(id) on delete cascade,
   field_key text not null,
   file_name text not null,
+  file_size bigint,
+  file_type text,
   storage_bucket text not null,
   storage_path text not null,
+  uploaded_by_user_id uuid references auth.users(id),
+  uploaded_by_role text not null default 'customer' check (uploaded_by_role in ('customer', 'admin', 'system')),
+  linked_checklist_item_id uuid,
+  customer_note text,
   created_at timestamptz not null default now()
 );
 
@@ -126,6 +135,8 @@ create table if not exists public.request_document_checklist (
   linked_file_id uuid references public.request_files(id) on delete set null,
   required boolean not null default true,
   sort_order int not null default 0,
+  customer_visible boolean not null default true,
+  admin_note_customer_visible boolean not null default false,
   unique (request_id, document_key)
 );
 
@@ -151,6 +162,7 @@ create table if not exists public.admin_notes (
   author_id uuid references public.profiles(id),
   note text not null,
   missing_documents jsonb not null default '[]',
+  customer_visible boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -167,12 +179,53 @@ create table if not exists public.request_activity_log (
 create index if not exists idx_service_requests_status on public.service_requests(status);
 create index if not exists idx_service_requests_urgency on public.service_requests(urgency);
 create index if not exists idx_service_requests_country on public.service_requests(country);
+create index if not exists idx_service_requests_customer_user_id on public.service_requests(customer_user_id);
+create index if not exists idx_service_requests_customer_email on public.service_requests ((lower(coalesce(customer_email, email))));
 create index if not exists idx_request_services_request_id on public.request_services(request_id);
 create index if not exists idx_request_answers_request_id on public.request_answers(request_id);
 create index if not exists idx_request_files_request_id on public.request_files(request_id);
 create index if not exists idx_document_templates_service_slug on public.document_templates(service_slug);
 create index if not exists idx_request_document_checklist_request_id on public.request_document_checklist(request_id);
 create index if not exists idx_request_document_checklist_status on public.request_document_checklist(status);
+
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'team', 'customer'));
+alter table public.profiles alter column role set default 'customer';
+
+alter table public.service_requests add column if not exists customer_user_id uuid references auth.users(id);
+alter table public.service_requests add column if not exists customer_email text;
+alter table public.service_requests add column if not exists customer_access_enabled boolean not null default true;
+update public.service_requests set customer_email = email where customer_email is null;
+
+alter table public.request_files add column if not exists uploaded_by_user_id uuid references auth.users(id);
+alter table public.request_files add column if not exists uploaded_by_role text not null default 'customer';
+alter table public.request_files add column if not exists linked_checklist_item_id uuid;
+alter table public.request_files add column if not exists customer_note text;
+alter table public.request_files add column if not exists file_size bigint;
+alter table public.request_files add column if not exists file_type text;
+alter table public.request_files drop constraint if exists request_files_uploaded_by_role_check;
+alter table public.request_files add constraint request_files_uploaded_by_role_check check (uploaded_by_role in ('customer', 'admin', 'system'));
+create index if not exists idx_request_files_linked_checklist_item_id on public.request_files(linked_checklist_item_id);
+
+alter table public.request_document_checklist add column if not exists customer_visible boolean not null default true;
+alter table public.request_document_checklist add column if not exists admin_note_customer_visible boolean not null default false;
+
+alter table public.admin_notes add column if not exists customer_visible boolean not null default false;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'request_files_linked_checklist_item_id_fkey'
+    and conrelid = 'public.request_files'::regclass
+  ) then
+    alter table public.request_files
+      add constraint request_files_linked_checklist_item_id_fkey
+      foreign key (linked_checklist_item_id)
+      references public.request_document_checklist(id)
+      on delete set null;
+  end if;
+end $$;
 
 alter table public.profiles enable row level security;
 alter table public.services enable row level security;
@@ -202,6 +255,22 @@ grant select, insert, update, delete on public.recommendation_answers to authent
 grant select, insert, update, delete on public.admin_notes to authenticated;
 grant select, insert, update, delete on public.request_activity_log to authenticated;
 
+drop policy if exists "Public can read active services" on public.services;
+drop policy if exists "Public can read active service questions" on public.service_questions;
+drop policy if exists "Admins can manage service catalog" on public.services;
+drop policy if exists "Admins can manage service questions" on public.service_questions;
+drop policy if exists "Admins can manage requests" on public.service_requests;
+drop policy if exists "Admins can manage request services" on public.request_services;
+drop policy if exists "Admins can manage request answers" on public.request_answers;
+drop policy if exists "Admins can manage request files" on public.request_files;
+drop policy if exists "Admins can manage document templates" on public.document_templates;
+drop policy if exists "Admins can manage request document checklist" on public.request_document_checklist;
+drop policy if exists "Admins can manage recommendation sessions" on public.recommendation_sessions;
+drop policy if exists "Admins can manage recommendation answers" on public.recommendation_answers;
+drop policy if exists "Admins can manage notes" on public.admin_notes;
+drop policy if exists "Admins can manage activity" on public.request_activity_log;
+drop policy if exists "Admins can read request documents" on storage.objects;
+
 create policy "Public can read active services"
 on public.services for select
 to anon, authenticated
@@ -218,11 +287,19 @@ using (
   )
 );
 
+drop policy if exists "Admins can manage profiles" on public.profiles;
+drop policy if exists "Users can read own profile" on public.profiles;
+
+create policy "Users can read own profile"
+on public.profiles for select
+to authenticated
+using ((select auth.uid()) = id);
+
 create policy "Admins can manage profiles"
 on public.profiles for all
 to authenticated
-using ((select auth.uid()) = id or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'))
-with check ((select auth.uid()) = id or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'));
+using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'))
+with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'));
 
 create policy "Admins can manage service catalog"
 on public.services for all
@@ -242,11 +319,41 @@ to authenticated
 using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
 with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
 
+drop policy if exists "Customers can read own requests" on public.service_requests;
+
+create policy "Customers can read own requests"
+on public.service_requests for select
+to authenticated
+using (
+  customer_access_enabled = true
+  and (
+    customer_user_id = (select auth.uid())
+    or lower(coalesce(customer_email, email)) = lower(coalesce((auth.jwt() ->> 'email'), ''))
+  )
+);
+
 create policy "Admins can manage request services"
 on public.request_services for all
 to authenticated
 using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
 with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+
+drop policy if exists "Customers can read own request services" on public.request_services;
+
+create policy "Customers can read own request services"
+on public.request_services for select
+to authenticated
+using (
+  exists (
+    select 1 from public.service_requests sr
+    where sr.id = request_services.request_id
+    and sr.customer_access_enabled = true
+    and (
+      sr.customer_user_id = (select auth.uid())
+      or lower(coalesce(sr.customer_email, sr.email)) = lower(coalesce((auth.jwt() ->> 'email'), ''))
+    )
+  )
+);
 
 create policy "Admins can manage request answers"
 on public.request_answers for all
@@ -254,11 +361,45 @@ to authenticated
 using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
 with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
 
+drop policy if exists "Customers can read own request answers" on public.request_answers;
+
+create policy "Customers can read own request answers"
+on public.request_answers for select
+to authenticated
+using (
+  exists (
+    select 1 from public.service_requests sr
+    where sr.id = request_answers.request_id
+    and sr.customer_access_enabled = true
+    and (
+      sr.customer_user_id = (select auth.uid())
+      or lower(coalesce(sr.customer_email, sr.email)) = lower(coalesce((auth.jwt() ->> 'email'), ''))
+    )
+  )
+);
+
 create policy "Admins can manage request files"
 on public.request_files for all
 to authenticated
 using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
 with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+
+drop policy if exists "Customers can read own request files" on public.request_files;
+
+create policy "Customers can read own request files"
+on public.request_files for select
+to authenticated
+using (
+  exists (
+    select 1 from public.service_requests sr
+    where sr.id = request_files.request_id
+    and sr.customer_access_enabled = true
+    and (
+      sr.customer_user_id = (select auth.uid())
+      or lower(coalesce(sr.customer_email, sr.email)) = lower(coalesce((auth.jwt() ->> 'email'), ''))
+    )
+  )
+);
 
 create policy "Admins can manage document templates"
 on public.document_templates for all
@@ -271,6 +412,24 @@ on public.request_document_checklist for all
 to authenticated
 using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
 with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+
+drop policy if exists "Customers can read own visible checklist" on public.request_document_checklist;
+
+create policy "Customers can read own visible checklist"
+on public.request_document_checklist for select
+to authenticated
+using (
+  customer_visible = true
+  and exists (
+    select 1 from public.service_requests sr
+    where sr.id = request_document_checklist.request_id
+    and sr.customer_access_enabled = true
+    and (
+      sr.customer_user_id = (select auth.uid())
+      or lower(coalesce(sr.customer_email, sr.email)) = lower(coalesce((auth.jwt() ->> 'email'), ''))
+    )
+  )
+);
 
 create policy "Admins can manage recommendation sessions"
 on public.recommendation_sessions for all
@@ -289,6 +448,24 @@ on public.admin_notes for all
 to authenticated
 using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
 with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+
+drop policy if exists "Customers can read visible notes" on public.admin_notes;
+
+create policy "Customers can read visible notes"
+on public.admin_notes for select
+to authenticated
+using (
+  customer_visible = true
+  and exists (
+    select 1 from public.service_requests sr
+    where sr.id = admin_notes.request_id
+    and sr.customer_access_enabled = true
+    and (
+      sr.customer_user_id = (select auth.uid())
+      or lower(coalesce(sr.customer_email, sr.email)) = lower(coalesce((auth.jwt() ->> 'email'), ''))
+    )
+  )
+);
 
 create policy "Admins can manage activity"
 on public.request_activity_log for all

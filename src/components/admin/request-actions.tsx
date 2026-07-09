@@ -27,6 +27,7 @@ export function RequestActions({
   const [assignedTo, setAssignedTo] = useState("");
   const [note, setNote] = useState("");
   const [missingDocuments, setMissingDocuments] = useState("");
+  const [customerVisible, setCustomerVisible] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -63,6 +64,7 @@ export function RequestActions({
           author_id: actorId,
           note: note || "Missing documents marked.",
           missing_documents: documents,
+          customer_visible: customerVisible,
         });
 
         if (noteError) {
@@ -81,6 +83,7 @@ export function RequestActions({
       setMessage("Saved.");
       setNote("");
       setMissingDocuments("");
+      setCustomerVisible(false);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save changes.");
@@ -131,6 +134,15 @@ export function RequestActions({
             placeholder="One missing document per line"
             className="mt-2 min-h-24 w-full rounded-md border border-navy-200 px-3 py-2"
           />
+        </label>
+        <label className="flex items-start gap-2 text-sm text-navy-650">
+          <input
+            type="checkbox"
+            checked={customerVisible}
+            onChange={(event) => setCustomerVisible(event.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-navy-300 text-teal-700"
+          />
+          <span>Show this note in the customer portal</span>
         </label>
         <button
           type="button"

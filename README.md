@@ -1,4 +1,4 @@
-# Globalflowa MVP + Phase 2A/2B Readiness
+# Globalflowa MVP + Phase 3A Customer Portal
 
 Professional B2B website and service request portal for Globalflowa, a Germany market-entry, compliance, warehouse, labeling, packing, and marketplace preparation partner for foreign sellers.
 
@@ -14,7 +14,7 @@ Professional B2B website and service request portal for Globalflowa, a Germany m
 - Basic Supabase Auth admin dashboard
 - Request list, filters, detail view, status updates, internal notes, missing-document marking, assignment field, activity history, and CSV export
 
-Phase 2A adds the automated document checklist. Phase 2B adds production/staging setup documentation, live QA guidance, and small runtime hardening for real deployments. Other Phase 2 items such as customer portal, customer status tracking, pricing calculator, and German/Chinese localization are intentionally not built yet.
+Phase 2A adds the automated document checklist. Phase 2B adds production/staging setup documentation, live QA guidance, and small runtime hardening for real deployments. Phase 3A adds the customer portal and missing-document upload flow. Pricing calculator and German/Chinese localization are intentionally not built yet.
 
 ## Phase 2C live QA status
 
@@ -27,6 +27,71 @@ Phase 2C staging/live QA passed on 2026-07-09.
 - Secrets are stored only in Vercel, Supabase, and Resend. No secrets are committed to this repository.
 
 See [docs/live-qa-checklist.md](docs/live-qa-checklist.md) for the completed live QA result and repeatable QA checklist.
+
+## Phase 3A customer portal
+
+Phase 3A adds a secure case-tracking portal for customers.
+
+Customer routes:
+
+- `/portal/login`
+- `/portal`
+- `/portal/requests`
+- `/portal/requests/[id]`
+- `/portal/profile`
+
+Customer portal capabilities:
+
+- Email/password login through Supabase Auth.
+- Customers see only requests linked to their authenticated email address or `customer_user_id`.
+- Request cards show current status, urgency, service, checklist completion, and missing/incorrect/expired document counts.
+- Request detail pages show selected services, request status, submitted customer/product information, customer-visible admin notes, and generated document checklist groups.
+- Customers can upload missing or corrected documents against a checklist item.
+- Customers can add a short note to a checklist item.
+- Customer uploads are saved to the private `request-documents` bucket and recorded in `request_files`.
+- Uploaded files are linked to `request_document_checklist`, and the checklist item moves to `under_review`.
+- Customer downloads use `/api/portal/files/[id]`, which verifies the customer session and RLS visibility before creating a short-lived signed URL.
+- Internal upload notification emails are sent to `INTERNAL_NOTIFICATION_EMAIL` when email is configured.
+
+Admin Phase 3A updates:
+
+- Admin request detail shows whether a request has portal access, customer email, and linked customer user ID.
+- Customer-uploaded files are labeled in the uploaded files section.
+- Customer notes on checklist items are visible to admins.
+- Admins can decide whether a checklist admin note is visible to the customer.
+- Admin notes can be marked customer-visible when saved from the admin action panel.
+- Existing checklist review, file linking, secure admin download, status updates, activity history, and CSV export remain in place.
+
+Customer account linking:
+
+- MVP linking uses Option A: a signed-in customer can read requests where `service_requests.customer_user_id` equals the auth user ID, or where `service_requests.customer_email`/`email` matches the auth user email.
+- The portal attempts a server-side auto-link by email when a customer opens their requests, but the email-based RLS policy already allows access when the email matches.
+- Customers cannot change checklist status directly. They can only upload files or add customer notes through `/api/portal/upload`.
+- If a customer submitted a request with a different email address, an admin should update `customer_email` or link `customer_user_id` after verifying the customer.
+
+Phase 3A schema changes:
+
+- `service_requests.customer_user_id`
+- `service_requests.customer_email`
+- `service_requests.customer_access_enabled`
+- `request_document_checklist.customer_visible`
+- `request_document_checklist.admin_note_customer_visible`
+- `admin_notes.customer_visible`
+- `request_files.uploaded_by_user_id`
+- `request_files.uploaded_by_role`
+- `request_files.linked_checklist_item_id`
+- `request_files.customer_note`
+- `request_files.file_size`
+- `request_files.file_type`
+
+Security and RLS notes:
+
+- `profiles.role` now defaults to `customer`; admin/team roles must be assigned explicitly.
+- Customer RLS policies allow authenticated customers to read only their own requests, services, answers, files, visible checklist items, and customer-visible notes.
+- Customer uploads are handled by a server route that performs an ownership check before using the service role for private storage and checklist updates.
+- Customers cannot read all requests, cannot access admin routes, cannot update checklist statuses, and cannot download files from another request.
+- Admin file downloads require an admin/team profile; customer file downloads use a separate customer route.
+- The Supabase service role key remains server-only and is never exposed to browser code.
 
 ## Phase 2A document checklist
 
@@ -171,6 +236,8 @@ For Phase 2A, re-run `supabase/schema.sql` and `supabase/seed.sql` on existing p
 
 Public users do not receive unrestricted checklist-table access. The server route creates request checklist rows with the service role key after validating a submission. Admin/team users can read and update checklist rows through Supabase Auth and RLS.
 
+For Phase 3A, re-run `supabase/schema.sql` on existing projects to add customer portal ownership fields, customer-visible checklist/note fields, request file upload metadata, and customer RLS policies. Existing admin users keep access only if their `profiles.role` is explicitly `admin` or `team`.
+
 Storage bucket:
 
 - `request-documents`
@@ -274,6 +341,13 @@ Phase 2A admin checklist features:
 - Link an uploaded request file to a checklist item from a dropdown.
 - Open linked files through the existing secure admin signed-URL route.
 - See required-document completion percentage in the request list and detail view.
+
+Phase 3A admin/customer coordination:
+
+- Use checklist item status `missing`, `incorrect`, or `expired` to make action items clear in the customer portal.
+- Add a checklist admin note and enable “Show this admin note in the customer portal” when the customer should see the correction reason.
+- Use the admin note visibility checkbox only for customer-safe notes; internal notes remain private by default.
+- Customer uploads appear in the same uploaded files list and can be linked to checklist items.
 
 ## How checklist generation works
 
@@ -383,6 +457,24 @@ Local with real credentials:
 6. Confirm emails are delivered.
 7. Log in as admin and verify detail, file download, checklist status updates, file linking, request status update, admin notes, and CSV export.
 
+Customer portal local/staging test:
+
+1. Create a Supabase Auth customer user with an email matching an existing `service_requests.email` or `customer_email`.
+2. Do not give this profile `admin` or `team` role.
+3. Log in at `/portal/login`.
+4. Confirm only that customer’s requests appear in `/portal/requests`.
+5. Open `/portal/requests/[id]`.
+6. Confirm status, selected services, visible notes, linked files, and generated checklist display.
+7. Mark a checklist item as `missing`, `incorrect`, or `expired` from admin, with a customer-visible note.
+8. Refresh the customer portal and confirm the item is highlighted.
+9. Upload a test file and optional note from the customer portal.
+10. Confirm `request_files` has `uploaded_by_role='customer'`, `linked_checklist_item_id`, and `customer_note`.
+11. Confirm the checklist item status becomes `under_review`.
+12. Confirm `request_activity_log` includes the customer upload event.
+13. Confirm the internal customer-upload email is delivered when email env vars are configured.
+14. Log in as admin, download the uploaded file through `/api/admin/files/[id]`, then mark the item accepted.
+15. Refresh the customer portal and confirm accepted status is visible.
+
 Vercel Preview:
 
 1. Add Preview environment variables.
@@ -422,6 +514,9 @@ curl -I http://localhost:3011/services
 curl -I http://localhost:3011/check-requirements
 curl -I http://localhost:3011/request
 curl -I http://localhost:3011/request/success
+curl -I http://localhost:3011/portal/login
+curl -I http://localhost:3011/portal
+curl -I http://localhost:3011/portal/requests
 curl -I http://localhost:3011/admin/login
 curl -I http://localhost:3011/admin/requests
 curl -I http://localhost:3011/admin/services

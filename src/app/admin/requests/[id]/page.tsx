@@ -7,6 +7,7 @@ import {
 } from "@/components/admin/document-checklist-section";
 import { RequestActions } from "@/components/admin/request-actions";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { isAdminUser } from "@/lib/supabase/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ type RequestRow = {
   company_name: string;
   contact_person: string;
   email: string;
+  customer_email: string | null;
+  customer_user_id: string | null;
+  customer_access_enabled: boolean | null;
   phone: string | null;
   whatsapp: string | null;
   wechat: string | null;
@@ -46,12 +50,16 @@ type FileRow = {
   file_name: string;
   storage_bucket: string;
   storage_path: string;
+  uploaded_by_role: string | null;
+  linked_checklist_item_id: string | null;
+  customer_note: string | null;
 };
 
 type NoteRow = {
   id: string;
   note: string;
   missing_documents: string[];
+  customer_visible: boolean;
   created_at: string;
 };
 
@@ -76,6 +84,9 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
     redirect("/admin/login");
+  }
+  if (!(await isAdminUser(supabase, userData.user))) {
+    redirect("/portal/requests");
   }
 
   const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }] =
@@ -120,6 +131,9 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
               rows={{
                 "Contact person": requestRow.contact_person,
                 Email: requestRow.email,
+                "Portal email": requestRow.customer_email,
+                "Portal linked user": requestRow.customer_user_id,
+                "Portal access": requestRow.customer_access_enabled === false ? "Disabled" : "Enabled",
                 Phone: requestRow.phone,
                 WhatsApp: requestRow.whatsapp,
                 WeChat: requestRow.wechat,
@@ -224,7 +238,18 @@ function FilesSection({ files }: { files: FileRow[] }) {
               >
                 {file.file_name}
               </Link>
+              <span className="ml-2 rounded-full bg-white px-2 py-1 text-xs font-semibold text-navy-650">
+                {file.uploaded_by_role ?? "customer"}
+              </span>
               <span className="block font-mono text-xs">{file.storage_bucket}/{file.storage_path}</span>
+              {file.linked_checklist_item_id ? (
+                <span className="mt-1 block text-xs text-teal-700">
+                  Linked to checklist item {file.linked_checklist_item_id}
+                </span>
+              ) : null}
+              {file.customer_note ? (
+                <p className="mt-2 text-xs text-navy-650">Customer note: {file.customer_note}</p>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -248,6 +273,9 @@ function NotesSection({ notes }: { notes: NoteRow[] }) {
                 <p className="mt-2 text-sm font-semibold text-teal-700">
                   Missing: {note.missing_documents.join(", ")}
                 </p>
+              ) : null}
+              {note.customer_visible ? (
+                <p className="mt-2 text-xs font-semibold text-teal-700">Visible to customer</p>
               ) : null}
               <p className="mt-2 text-xs text-navy-650">{new Date(note.created_at).toLocaleString()}</p>
             </div>

@@ -37,7 +37,8 @@ export function SiteHeader() {
             Admin Login
           </Link>
         </nav>
-        <div className="hidden sm:block">
+        <div className="hidden items-center gap-3 sm:flex">
+          <ButtonLink href="/portal/login" variant="secondary">Customer Portal</ButtonLink>
           <ButtonLink href="/request">Start Request</ButtonLink>
         </div>
       </div>
@@ -49,6 +50,9 @@ export function SiteHeader() {
         ))}
         <Link href="/admin/login" className="shrink-0">
           Admin Login
+        </Link>
+        <Link href="/portal/login" className="shrink-0">
+          Customer Portal
         </Link>
       </nav>
     </header>

@@ -23,6 +23,9 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
         <p className="mt-4 leading-7 text-navy-650">
           Globalflowa will review your information and contact you shortly.
         </p>
+        <p className="mt-3 text-sm leading-6 text-navy-650">
+          When your customer login is configured, you can access the portal to track status and upload any missing or corrected documents.
+        </p>
         {id ? (
           <p className="mt-4 rounded-md bg-navy-50 px-4 py-3 font-mono text-sm text-navy-700">
             Submission ID: {id}
@@ -35,6 +38,9 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
           </Link>
           <Link href="/services" className="rounded-md border border-navy-200 px-5 py-3 text-sm font-semibold text-navy-950">
             View services
+          </Link>
+          <Link href="/portal/login" className="rounded-md border border-teal-200 bg-teal-50 px-5 py-3 text-sm font-semibold text-teal-800">
+            Access Customer Portal
           </Link>
         </div>
       </div>

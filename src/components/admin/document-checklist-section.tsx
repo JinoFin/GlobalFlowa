@@ -18,6 +18,7 @@ export type AdminChecklistItem = {
   category: string;
   status: ChecklistStatus;
   admin_note: string | null;
+  admin_note_customer_visible: boolean;
   customer_note: string | null;
   linked_file_id: string | null;
   required: boolean;
@@ -33,6 +34,7 @@ export type AdminFileOption = {
 type EditableItem = AdminChecklistItem & {
   draftStatus: ChecklistStatus;
   draftNote: string;
+  draftAdminNoteCustomerVisible: boolean;
   draftFileId: string;
 };
 
@@ -51,6 +53,7 @@ export function DocumentChecklistSection({
       ...item,
       draftStatus: item.status,
       draftNote: item.admin_note ?? "",
+      draftAdminNoteCustomerVisible: item.admin_note_customer_visible,
       draftFileId: item.linked_file_id ?? "",
     })),
   );
@@ -94,6 +97,7 @@ export function DocumentChecklistSection({
         .update({
           status: item.draftStatus,
           admin_note: item.draftNote || null,
+          admin_note_customer_visible: item.draftAdminNoteCustomerVisible,
           linked_file_id: item.draftFileId || null,
           updated_at: new Date().toISOString(),
         })
@@ -120,6 +124,7 @@ export function DocumentChecklistSection({
                 ...currentItem,
                 status: item.draftStatus,
                 admin_note: item.draftNote || null,
+                admin_note_customer_visible: item.draftAdminNoteCustomerVisible,
                 linked_file_id: item.draftFileId || null,
               }
             : currentItem,
@@ -292,6 +297,17 @@ function ChecklistCard({
           className="mt-2 min-h-20 w-full rounded-md border border-navy-200 bg-white px-3 py-2 text-sm"
           placeholder="Add correction notes, expiry comments, or review decisions."
         />
+      </label>
+      <label className="mt-3 flex items-start gap-2 text-sm text-navy-650">
+        <input
+          type="checkbox"
+          checked={item.draftAdminNoteCustomerVisible}
+          onChange={(event) =>
+            onDraft(item.id, { draftAdminNoteCustomerVisible: event.target.checked })
+          }
+          className="mt-1 h-4 w-4 rounded border-navy-300 text-teal-700"
+        />
+        <span>Show this admin note in the customer portal</span>
       </label>
       <button
         type="button"

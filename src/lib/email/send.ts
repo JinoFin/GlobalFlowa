@@ -57,6 +57,50 @@ export async function sendRequestEmails({
   });
 }
 
+export async function sendCustomerUploadEmail({
+  companyName,
+  customerEmail,
+  requestId,
+  checklistTitle,
+  fileName,
+  customerNote,
+}: {
+  companyName: string;
+  customerEmail: string;
+  requestId: string;
+  checklistTitle: string;
+  fileName: string | null;
+  customerNote: string | null;
+}) {
+  const resend = getResend();
+  if (!resend) {
+    console.warn("EMAIL_PROVIDER_API_KEY is not configured. Customer upload email was not sent.");
+    return;
+  }
+
+  const internalEmail = process.env.INTERNAL_NOTIFICATION_EMAIL ?? "info@globalflowa.com";
+  const fromEmail = process.env.EMAIL_FROM ?? "Globalflowa Portal <onboarding@resend.dev>";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  const adminUrl = siteUrl ? `${siteUrl}/admin/requests/${requestId}` : `/admin/requests/${requestId}`;
+
+  await resend.emails.send({
+    from: fromEmail,
+    to: internalEmail,
+    subject: `Customer uploaded document - ${companyName} - ${requestId}`,
+    text: [
+      "Customer uploaded document",
+      "",
+      `Customer email: ${customerEmail}`,
+      `Request ID: ${requestId}`,
+      `Checklist item: ${checklistTitle}`,
+      `File name: ${fileName ?? "No file uploaded; note only"}`,
+      `Customer note: ${customerNote || "No note provided."}`,
+      "",
+      `Admin request detail: ${adminUrl}`,
+    ].join("\n"),
+  });
+}
+
 function buildInternalEmail(
   payload: RequestPayload,
   submissionId: string,
@@ -101,10 +145,16 @@ function buildInternalEmail(
 }
 
 function buildCustomerEmail(submissionId: string, checklistItems: GeneratedChecklistItem[]) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  const portalUrl = siteUrl ? `${siteUrl}/portal/login` : "/portal/login";
+
   return [
     "Thank you. Your request has been submitted successfully.",
     "",
     "Globalflowa will review your information and contact you shortly.",
+    "",
+    "When your customer login is configured, you can access the Globalflowa customer portal to track request status and upload missing or corrected documents.",
+    `Customer portal: ${portalUrl}`,
     "",
     "Based on your request, the following documents may be required:",
     formatCustomerChecklist(checklistItems),

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/admin/logout-button";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { isAdminUser } from "@/lib/supabase/roles";
 
 export const metadata = {
   title: "Admin Requests",
@@ -40,6 +41,9 @@ export default async function AdminRequestsPage({ searchParams }: AdminRequestsP
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
     redirect("/admin/login");
+  }
+  if (!(await isAdminUser(supabase, userData.user))) {
+    redirect("/portal/requests");
   }
 
   let query = supabase

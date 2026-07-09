@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
-import { isAdminUser } from "@/lib/supabase/roles";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -32,9 +31,6 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
   if (!userData.user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
-  if (!(await isAdminUser(supabase, userData.user))) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-  }
 
   const { data: fileRow, error: fileError } = await supabase
     .from("request_files")
@@ -43,14 +39,7 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
     .single();
 
   if (fileError || !fileRow) {
-    console.error("Admin file lookup failed", {
-      fileId: id,
-      reason: fileError?.message ?? "missing file row",
-    });
-    return NextResponse.json(
-      { error: "File not found or unavailable." },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: "File not found or access denied." }, { status: 404 });
   }
 
   let serviceClient;
@@ -69,15 +58,12 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
     .createSignedUrl(file.storage_path, 60);
 
   if (error || !data?.signedUrl) {
-    console.error("Admin signed file URL creation failed", {
+    console.error("Customer signed file URL creation failed", {
       fileId: id,
       bucket: file.storage_bucket,
       reason: error?.message ?? "missing signed URL",
     });
-    return NextResponse.json(
-      { error: "Could not create a secure file download link." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Could not create a secure file download link." }, { status: 500 });
   }
 
   return NextResponse.redirect(data.signedUrl);

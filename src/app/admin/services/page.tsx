@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { serviceCategories, services as localServices } from "@/lib/catalog";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { isAdminUser } from "@/lib/supabase/roles";
 
 export const metadata = {
   title: "Admin Services",
@@ -42,6 +43,9 @@ export default async function AdminServicesPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
       redirect("/admin/login");
+    }
+    if (!(await isAdminUser(supabase, userData.user))) {
+      redirect("/portal/requests");
     }
 
     const { data, error } = await supabase

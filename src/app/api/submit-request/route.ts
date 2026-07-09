@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
       deadline: payload.customer.deadline || null,
       message: payload.customer.message ?? null,
       source: "website",
+      customer_email: payload.customer.email,
+      customer_access_enabled: true,
     })
     .select("id")
     .single();
@@ -167,7 +169,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const uploadedFiles: Array<{ field: string; name: string; path: string }> = [];
+  const uploadedFiles: Array<{ field: string; name: string; path: string; size: number; type: string }> = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("files.") || !(value instanceof File)) continue;
 
@@ -195,7 +197,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    uploadedFiles.push({ field, name: value.name, path });
+    uploadedFiles.push({
+      field,
+      name: value.name,
+      path,
+      size: value.size,
+      type: value.type || "application/octet-stream",
+    });
   }
 
   let savedFiles: UploadedFileSummary[] = [];
@@ -205,8 +213,11 @@ export async function POST(request: NextRequest) {
         request_id: submissionId,
         field_key: file.field,
         file_name: file.name,
+        file_size: file.size,
+        file_type: file.type,
         storage_bucket: "request-documents",
         storage_path: file.path,
+        uploaded_by_role: "customer",
       })),
     ).select("id, field_key, file_name, storage_path");
     if (error) {
