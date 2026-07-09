@@ -176,18 +176,6 @@ create table if not exists public.request_activity_log (
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_service_requests_status on public.service_requests(status);
-create index if not exists idx_service_requests_urgency on public.service_requests(urgency);
-create index if not exists idx_service_requests_country on public.service_requests(country);
-create index if not exists idx_service_requests_customer_user_id on public.service_requests(customer_user_id);
-create index if not exists idx_service_requests_customer_email on public.service_requests ((lower(coalesce(customer_email, email))));
-create index if not exists idx_request_services_request_id on public.request_services(request_id);
-create index if not exists idx_request_answers_request_id on public.request_answers(request_id);
-create index if not exists idx_request_files_request_id on public.request_files(request_id);
-create index if not exists idx_document_templates_service_slug on public.document_templates(service_slug);
-create index if not exists idx_request_document_checklist_request_id on public.request_document_checklist(request_id);
-create index if not exists idx_request_document_checklist_status on public.request_document_checklist(status);
-
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'team', 'customer'));
 alter table public.profiles alter column role set default 'customer';
@@ -205,7 +193,6 @@ alter table public.request_files add column if not exists file_size bigint;
 alter table public.request_files add column if not exists file_type text;
 alter table public.request_files drop constraint if exists request_files_uploaded_by_role_check;
 alter table public.request_files add constraint request_files_uploaded_by_role_check check (uploaded_by_role in ('customer', 'admin', 'system'));
-create index if not exists idx_request_files_linked_checklist_item_id on public.request_files(linked_checklist_item_id);
 
 alter table public.request_document_checklist add column if not exists customer_visible boolean not null default true;
 alter table public.request_document_checklist add column if not exists admin_note_customer_visible boolean not null default false;
@@ -226,6 +213,19 @@ begin
       on delete set null;
   end if;
 end $$;
+
+create index if not exists idx_service_requests_status on public.service_requests(status);
+create index if not exists idx_service_requests_urgency on public.service_requests(urgency);
+create index if not exists idx_service_requests_country on public.service_requests(country);
+create index if not exists idx_service_requests_customer_user_id on public.service_requests(customer_user_id);
+create index if not exists idx_service_requests_customer_email on public.service_requests ((lower(coalesce(customer_email, email))));
+create index if not exists idx_request_services_request_id on public.request_services(request_id);
+create index if not exists idx_request_answers_request_id on public.request_answers(request_id);
+create index if not exists idx_request_files_request_id on public.request_files(request_id);
+create index if not exists idx_request_files_linked_checklist_item_id on public.request_files(linked_checklist_item_id);
+create index if not exists idx_document_templates_service_slug on public.document_templates(service_slug);
+create index if not exists idx_request_document_checklist_request_id on public.request_document_checklist(request_id);
+create index if not exists idx_request_document_checklist_status on public.request_document_checklist(status);
 
 alter table public.profiles enable row level security;
 alter table public.services enable row level security;
@@ -254,6 +254,41 @@ grant select, insert, update, delete on public.recommendation_sessions to authen
 grant select, insert, update, delete on public.recommendation_answers to authenticated;
 grant select, insert, update, delete on public.admin_notes to authenticated;
 grant select, insert, update, delete on public.request_activity_log to authenticated;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = (select auth.uid())
+    and role = 'admin'
+  );
+$$;
+
+create or replace function public.is_admin_or_team()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = (select auth.uid())
+    and role in ('admin', 'team')
+  );
+$$;
+
+revoke all on function public.is_admin() from public;
+revoke all on function public.is_admin_or_team() from public;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_admin_or_team() to authenticated;
 
 drop policy if exists "Public can read active services" on public.services;
 drop policy if exists "Public can read active service questions" on public.service_questions;
@@ -298,26 +333,26 @@ using ((select auth.uid()) = id);
 create policy "Admins can manage profiles"
 on public.profiles for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'));
+using (public.is_admin())
+with check (public.is_admin());
 
 create policy "Admins can manage service catalog"
 on public.services for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'));
+using (public.is_admin())
+with check (public.is_admin());
 
 create policy "Admins can manage service questions"
 on public.service_questions for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role = 'admin'));
+using (public.is_admin())
+with check (public.is_admin());
 
 create policy "Admins can manage requests"
 on public.service_requests for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 drop policy if exists "Customers can read own requests" on public.service_requests;
 
@@ -335,8 +370,8 @@ using (
 create policy "Admins can manage request services"
 on public.request_services for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 drop policy if exists "Customers can read own request services" on public.request_services;
 
@@ -358,8 +393,8 @@ using (
 create policy "Admins can manage request answers"
 on public.request_answers for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 drop policy if exists "Customers can read own request answers" on public.request_answers;
 
@@ -381,8 +416,8 @@ using (
 create policy "Admins can manage request files"
 on public.request_files for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 drop policy if exists "Customers can read own request files" on public.request_files;
 
@@ -404,14 +439,14 @@ using (
 create policy "Admins can manage document templates"
 on public.document_templates for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 create policy "Admins can manage request document checklist"
 on public.request_document_checklist for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 drop policy if exists "Customers can read own visible checklist" on public.request_document_checklist;
 
@@ -434,20 +469,20 @@ using (
 create policy "Admins can manage recommendation sessions"
 on public.recommendation_sessions for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 create policy "Admins can manage recommendation answers"
 on public.recommendation_answers for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 create policy "Admins can manage notes"
 on public.admin_notes for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 drop policy if exists "Customers can read visible notes" on public.admin_notes;
 
@@ -470,8 +505,8 @@ using (
 create policy "Admins can manage activity"
 on public.request_activity_log for all
 to authenticated
-using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')))
-with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team')));
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
 
 insert into storage.buckets (id, name, public)
 values ('request-documents', 'request-documents', false)
@@ -482,5 +517,5 @@ on storage.objects for select
 to authenticated
 using (
   bucket_id = 'request-documents'
-  and exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('admin', 'team'))
+  and public.is_admin_or_team()
 );

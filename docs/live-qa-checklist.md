@@ -31,7 +31,8 @@ Security note:
 ## Before QA
 
 - Confirm Vercel has all environment variables for the tested environment.
-- Confirm Supabase `schema.sql` and `seed.sql` have been run.
+- For new Supabase projects, confirm `schema.sql` and `seed.sql` have been run.
+- For existing Phase 2C live projects, confirm `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` has been run before Phase 3A QA.
 - Confirm the `request-documents` storage bucket is private.
 - Confirm at least one Supabase Auth admin user has a matching `profiles` row with role `admin` or `team`.
 - Confirm Resend has a verified sender domain for production use.

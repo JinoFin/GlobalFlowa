@@ -197,8 +197,8 @@ done < .env.example
 3. Copy the anon/public key into `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 4. Copy the service role key into `SUPABASE_SERVICE_ROLE_KEY`. Keep this server-only.
 5. Open the SQL editor.
-6. Run `supabase/schema.sql`.
-7. Run `supabase/seed.sql`.
+6. For a new Supabase project, run `supabase/schema.sql`.
+7. For a new Supabase project, run `supabase/seed.sql`.
 8. Optional for QA and demos: run `supabase/demo-data.sql`.
 9. Confirm all public tables have RLS enabled in Authentication -> Policies or Database -> Tables.
 10. Confirm active service catalog rows are publicly readable and request/admin tables are restricted to authenticated `admin`/`team` profiles.
@@ -236,7 +236,16 @@ For Phase 2A, re-run `supabase/schema.sql` and `supabase/seed.sql` on existing p
 
 Public users do not receive unrestricted checklist-table access. The server route creates request checklist rows with the service role key after validating a submission. Admin/team users can read and update checklist rows through Supabase Auth and RLS.
 
-For Phase 3A, re-run `supabase/schema.sql` on existing projects to add customer portal ownership fields, customer-visible checklist/note fields, request file upload metadata, and customer RLS policies. Existing admin users keep access only if their `profiles.role` is explicitly `admin` or `team`.
+For existing Phase 2C live projects, do not re-run the whole schema as a migration substitute. Run `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` to add the Phase 3A customer portal fields, file metadata, customer RLS policies, and SECURITY DEFINER admin role helpers. Existing admin users keep access only if their `profiles.role` is explicitly `admin` or `team`.
+
+For new projects, run only:
+
+```text
+supabase/schema.sql
+supabase/seed.sql
+```
+
+Then optionally run `supabase/demo-data.sql` for staging/demo content.
 
 Storage bucket:
 
