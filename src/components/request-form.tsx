@@ -490,8 +490,7 @@ function Confirmation({
         <h3 className="font-semibold text-navy-950">Confirmation screen</h3>
         <p className="mt-2 text-sm leading-6 text-navy-650">
           Review the summary below. When you submit, Globalflowa receives a
-          structured request email and the request is saved when Supabase
-          credentials are configured.
+          structured request and the information is stored for admin review.
         </p>
       </div>
 

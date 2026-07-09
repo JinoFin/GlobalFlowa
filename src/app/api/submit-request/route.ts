@@ -47,7 +47,21 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = parsed.data;
-  const supabase = getSupabaseServiceClient();
+  let supabase;
+  try {
+    supabase = getSupabaseServiceClient();
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Supabase is not configured for request submission.",
+      },
+      { status: 503 },
+    );
+  }
+
   const mainService =
     getServiceBySlug(payload.selectedServices[0] ?? "")?.name ??
     payload.selectedServices[0] ??

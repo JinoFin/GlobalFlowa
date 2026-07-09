@@ -30,9 +30,15 @@ export default async function AdminServicesPage() {
     })),
   }));
   let setupMessage: string | null = null;
+  let supabase;
 
   try {
-    const supabase = await createSupabaseServerClient();
+    supabase = await createSupabaseServerClient();
+  } catch (error) {
+    setupMessage = error instanceof Error ? error.message : "Using local catalog fallback.";
+  }
+
+  if (supabase) {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) {
       redirect("/admin/login");
@@ -48,8 +54,6 @@ export default async function AdminServicesPage() {
     } else if (data) {
       rows = data as ServiceRow[];
     }
-  } catch (error) {
-    setupMessage = error instanceof Error ? error.message : "Using local catalog fallback.";
   }
 
   return (

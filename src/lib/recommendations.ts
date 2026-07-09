@@ -56,41 +56,58 @@ export function getRecommendations(answers: CheckerAnswers): Recommendation[] {
     });
   };
 
-  if (answers.wants_german_company === true || answers.has_german_company === false) {
-    add("company-formation-germany", "You may need a German legal presence or formation path before selling at scale.");
+  const companyLocation = String(answers.company_location ?? "");
+  const isLikelyOutsideEu = isOutsideEu(companyLocation);
+  const marketplaces = Array.isArray(answers.marketplaces) ? answers.marketplaces : [];
+  const sellsPhysicalProducts = answers.sells_physical_products === true;
+  const usesMarketplace = marketplaces.length > 0;
+
+  if (answers.wants_german_company === true) {
+    add("company-formation-germany", "You said you want to open a German company, so formation, address, VAT, and bookkeeping planning should be reviewed together.");
   }
 
-  if (answers.has_german_vat === false || answers.sells_physical_products === true) {
-    add("vat-registration-germany", "Physical product sales or German stock can trigger German VAT review.");
+  if (answers.has_german_company === false && answers.wants_german_company !== true && sellsPhysicalProducts) {
+    add("marketplace-seller-setup", "You do not have a German company yet, so seller setup should be checked before deciding whether formation is necessary.");
+  }
+
+  if (answers.has_german_vat === false && (sellsPhysicalProducts || usesMarketplace || answers.needs_storage === true)) {
+    add("vat-registration-germany", "German VAT should be reviewed because you sell physical products, use marketplaces, or may hold stock in Germany.");
   }
 
   if (answers.packaged_products === true && answers.has_lucid !== true) {
-    add("packaging-verpackg-lucid", "Packaged products sold to German customers commonly require VerpackG / LUCID readiness.");
+    add("packaging-verpackg-lucid", "Packaged products sold to German customers commonly require both LUCID registration and system participation evidence.");
   }
 
   if (answers.contains_electronics === true && answers.has_weee !== true) {
-    add("weee-elektrog-registration", "Electrical and electronic products commonly need WEEE / ElektroG registration evidence.");
+    add("weee-elektrog-registration", "Electrical and electronic products commonly need WEEE / ElektroG classification, brand, and registration evidence.");
   }
 
   if (answers.contains_batteries === true && answers.has_battery_registration !== true) {
-    add("battery-battg-registration", "Products containing or shipping with batteries may need BattG registration support.");
+    add("battery-battg-registration", "Products containing, shipping with, or separately selling batteries may need BattG registration support.");
   }
 
-  if (answers.needs_responsible_person === true) {
-    add("gpsr-eu-responsible-person", "Non-EU sellers may need an EU Responsible Person and GPSR document review.");
+  if (answers.needs_responsible_person === true || (isLikelyOutsideEu && sellsPhysicalProducts)) {
+    add(
+      "gpsr-eu-responsible-person",
+      isLikelyOutsideEu
+        ? "A non-EU seller placing physical consumer products in Germany should review GPSR and EU Responsible Person requirements."
+        : "You indicated a Responsible Person need, so product documents and GPSR evidence should be checked.",
+    );
   }
 
   if (answers.needs_storage === true) {
-    add("warehouse-storage-germany", "You indicated that stock storage in Germany is needed.");
+    add("warehouse-storage-germany", "You indicated that German stock storage is needed, so carton, pallet, dimension, and handling details should be collected.");
   }
 
   if (answers.needs_preparation === true) {
     add("relabeling-umlabeln", "Packing, repacking, relabeling, or barcode work should be reviewed before stock moves to marketplaces.");
   }
 
-  const marketplaces = Array.isArray(answers.marketplaces) ? answers.marketplaces : [];
-  if (answers.urgent_case === true || marketplaces.length > 0) {
-    const primaryMarketplace = marketplaces[0];
+  if (answers.urgent_case === true) {
+    add("authority-case-support", "An urgent marketplace or authority case should be triaged with notices, deadlines, and requested documents.");
+  }
+
+  for (const marketplace of marketplaces.slice(0, 2)) {
     const serviceMap: Record<string, string> = {
       Amazon: "amazon-compliance-support",
       Temu: "temu-compliance-support",
@@ -100,10 +117,8 @@ export function getRecommendations(answers: CheckerAnswers): Recommendation[] {
     };
 
     add(
-      serviceMap[primaryMarketplace] ?? "marketplace-compliance-support",
-      answers.urgent_case === true
-        ? "An urgent marketplace or authority case should be triaged with documents and deadline details."
-        : "Marketplace sales usually require a readiness check for seller, VAT, product, and compliance documents.",
+      serviceMap[marketplace] ?? "marketplace-compliance-support",
+      `${marketplace} sales usually require a readiness check for seller, VAT, product, and compliance documents.`,
     );
   }
 
@@ -112,4 +127,33 @@ export function getRecommendations(answers: CheckerAnswers): Recommendation[] {
   }
 
   return recommendations;
+}
+
+function isOutsideEu(location: string) {
+  const normalized = location.trim().toLowerCase();
+  if (!normalized) return false;
+
+  const euSignals = [
+    "germany",
+    "deutschland",
+    "france",
+    "italy",
+    "spain",
+    "netherlands",
+    "poland",
+    "belgium",
+    "austria",
+    "sweden",
+    "denmark",
+    "ireland",
+    "portugal",
+    "finland",
+    "czech",
+    "romania",
+    "hungary",
+    "eu",
+    "european union",
+  ];
+
+  return !euSignals.some((signal) => normalized.includes(signal));
 }

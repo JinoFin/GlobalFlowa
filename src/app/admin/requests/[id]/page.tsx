@@ -207,7 +207,12 @@ function FilesSection({ files }: { files: FileRow[] }) {
         <ul className="mt-4 space-y-3 text-sm text-navy-650">
           {files.map((file) => (
             <li key={file.id} className="rounded-md bg-navy-50 p-3">
-              <span className="font-semibold text-navy-950">{file.file_name}</span>
+              <Link
+                href={`/api/admin/files/${file.id}`}
+                className="font-semibold text-navy-950 underline decoration-teal-300 underline-offset-4 hover:text-teal-700"
+              >
+                {file.file_name}
+              </Link>
               <span className="block font-mono text-xs">{file.storage_bucket}/{file.storage_path}</span>
             </li>
           ))}
