@@ -574,6 +574,40 @@ Production:
 
 Use [docs/live-qa-checklist.md](docs/live-qa-checklist.md) for staging and production acceptance. It covers customer workflow, admin workflow, data workflow, the three required sample flows, and pass criteria.
 
+## Production MVP acceptance
+
+The MVP is ready for production acceptance when the following end-to-end paths have been verified against the deployed environment:
+
+- Public pages, service discovery, requirement checking, and request submission load without unexpected errors.
+- Admin login, operations overview, request review, customer messaging, document review, status updates, and export work for an `admin` or `team` profile.
+- Customer login shows only the authenticated customer’s requests, customer-visible messages/notes, checklist status, and protected files.
+- Customer uploads support missing documents and corrected replacements; accepted, waiting-for-review, and correction-required states remain clear after refresh.
+- Request confirmation, customer-message, and customer-upload notification emails arrive with working direct links.
+- Supabase RLS prevents cross-customer access and customer access to admin routes/data; the `request-documents` bucket remains private.
+- The Vercel production deployment uses the intended Git commit and production environment variables.
+
+The complete manual checklist, including negative authorization tests and known limitations, is in [docs/live-qa-checklist.md](docs/live-qa-checklist.md#production-mvp-acceptance-checklist).
+
+## Supabase live migration status
+
+- Phase 3A customer portal hardening: `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` — confirmed applied live.
+- Phase 3B customer messages: `supabase/migrations/202607100002_phase3b_customer_messages.sql` — confirmed applied live.
+- Phase 3C document review queue: no migration required.
+- Phase 4A–4E MVP completion sprint: no migration required; existing Phase 3 tables, columns, and RLS policies are reused.
+
+Never run `supabase/schema.sql` against the existing live database. If a future change needs database work, create and review a live-safe migration, apply it manually before deploying dependent code, and record the result in the live QA checklist.
+
+## Deployment runbook
+
+1. Pull the latest `main` with a fast-forward-only pull and confirm the worktree is clean.
+2. Run `npm run lint`, `npm run build`, `git diff --check`, and `npm audit --audit-level=moderate` when registry access is available.
+3. Review `supabase/migrations`. If a new migration exists, back up/confirm the target project, apply only that migration manually, and verify its schema/RLS result. Never run `schema.sql` on live.
+4. Push the reviewed commits to GitHub without force pushing.
+5. Wait for the matching Vercel deployment to finish and confirm the deployment uses the expected commit and environment.
+6. Smoke test `/`, `/request`, `/admin/login`, `/admin/overview`, `/admin/requests`, `/admin/document-review`, `/portal/login`, and `/portal/requests`.
+7. Run the production acceptance workflow in [docs/live-qa-checklist.md](docs/live-qa-checklist.md#manual-live-acceptance-test).
+8. If a release fails, stop new acceptance activity, roll Vercel back to the last accepted deployment, and assess database compatibility before reverting code. Do not reverse a database migration until a reviewed down-migration/data plan exists.
+
 ## Useful commands
 
 ```bash

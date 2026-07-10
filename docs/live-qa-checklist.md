@@ -163,3 +163,112 @@ Security note:
 - Customer A cannot read customer-visible or hidden messages for Customer B’s request, and hidden messages are not displayed to their owner.
 - Emails send successfully or fail gracefully without deleting saved request data.
 - No public response exposes Supabase service-role keys, email API keys, storage paths beyond intended admin views, or stack traces.
+
+## Production MVP Acceptance Checklist
+
+Record the tested deployment URL, Git commit, tester, date, and result before marking the MVP accepted.
+
+### Public website and request submission
+
+- [ ] `/`, `/services`, `/check-requirements`, `/request`, and `/contact` load on desktop and mobile without broken layout or unexpected console/server errors.
+- [ ] A realistic service request can be completed with customer details, service answers, and a small test file.
+- [ ] `/request/success` appears only after persistence succeeds.
+- [ ] Supabase contains the matching `service_requests`, `request_services`, `request_answers`, checklist, activity, and file-metadata rows.
+- [ ] The customer receives the polished request confirmation email with the correct company, request ID, portal link, and Globalflowa signature.
+
+### Admin operations
+
+- [ ] An admin/team user can log in at `/admin/login`; a customer user cannot access admin pages.
+- [ ] `/admin/overview` shows request totals, New, In Review, Waiting for Customer, documents needing review, Completed, recent messages, uploads, and activity.
+- [ ] Quick links from the overview open Requests, Document Review, Services, Export, and the customer portal.
+- [ ] `/admin/requests` filters correctly and opens the intended request.
+- [ ] Admin request detail clearly separates document status, customer communication, and internal operations.
+- [ ] The next recommended action matches the current checklist/request state.
+- [ ] The request timeline shows submission, admin updates, customer messaging, upload/replacement, and accept/reject activity where applicable.
+- [ ] Internal notes are visible to admin/team users and do not appear in the customer portal unless explicitly marked customer-visible.
+
+### Customer portal, messages, and uploads
+
+- [ ] A customer can log in at `/portal/login` and sees only their own requests in `/portal/requests`.
+- [ ] Request detail shows request status, next customer action, documents needing action, messages, and uploaded-file status.
+- [ ] A Phase 3B customer message appears with subject, message, related checklist items, and action hints.
+- [ ] The customer-message email is delivered with the saved subject, document list, direct request link, and Globalflowa signature.
+- [ ] A required/missing item accepts a customer upload and shows a clear success message.
+- [ ] Client and server reject files larger than 20 MB; the UI displays file-type/size guidance.
+- [ ] The checklist shows the most recent linked upload and changes to `under_review`.
+- [ ] Rejecting a document shows only the explicit correction reason and keeps the replacement-upload action available.
+- [ ] Uploading a replacement creates `customer_replaced_file` activity with the prior status/file context for admin review.
+- [ ] Protected customer/admin download routes create short-lived signed URLs; no private storage URL is embedded directly in page data.
+
+### Admin document review
+
+- [ ] `/admin/document-review` defaults to current customer uploads waiting for review and supports all filters, search, and sorting.
+- [ ] Accepting a current upload changes the checklist to `accepted` and writes `document_accepted` activity.
+- [ ] Rejecting requires a customer-facing reason, changes the checklist to `incorrect`, and writes `document_rejected` activity.
+- [ ] The customer sees the accepted/correction state after refresh and can replace a rejected file.
+- [ ] Existing admin checklist edits and status updates still work after document review actions.
+
+### Email delivery and Resend
+
+- [ ] `EMAIL_FROM` uses a verified production sender/domain and `INTERNAL_NOTIFICATION_EMAIL` reaches the operating team.
+- [ ] Request-submitted internal/customer emails, customer-message email, and customer-upload admin notification are delivered.
+- [ ] Direct links resolve to the tested production domain from `NEXT_PUBLIC_SITE_URL`.
+- [ ] Delivery failures are logged server-side without exposing provider details or secrets to customers.
+- [ ] Persistence remains intact when an email delivery fails.
+
+### Supabase RLS and storage security
+
+- [ ] RLS is enabled on `service_requests`, `request_document_checklist`, `request_files`, `request_activity_log`, `admin_notes`, `customer_messages`, and `profiles`.
+- [ ] Customer A cannot read Customer B’s request, files, checklist, messages, or visible notes by changing a URL/ID.
+- [ ] Customer users cannot insert/update/delete `customer_messages`, write activity directly, change checklist status directly, or call admin review/message APIs.
+- [ ] Admin/team policies use the existing safe helper functions and profile RLS remains non-recursive.
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` and `EMAIL_PROVIDER_API_KEY` exist only in server-side deployment configuration.
+- [ ] The `request-documents` bucket is private and public object URLs are not used.
+
+### Vercel deployment
+
+- [ ] Production reports a successful build for the intended Git commit.
+- [ ] Production environment variables are present with correct Production scope; Preview values do not point at production unless intentionally approved.
+- [ ] Supabase Auth redirect/site URLs include the production domain.
+- [ ] Route smoke checks pass for `/`, `/request`, `/admin/login`, `/admin/overview`, `/admin/requests`, `/admin/document-review`, `/portal/login`, and `/portal/requests`.
+- [ ] Vercel function logs show no unexpected auth, database, storage, upload, or email errors during acceptance.
+
+### Known MVP limitations
+
+- Operations remain human-reviewed; there is no AI document review or automatic acceptance.
+- Messaging is structured admin-to-customer email plus portal display, not realtime chat.
+- Pricing, payments, and multilingual localization are outside the current MVP.
+- Customer account provisioning/linking and production acceptance remain operational processes that require careful email ownership checks.
+- Migrations are intentionally manual; the application does not apply live schema changes during deploy.
+
+## Manual Live Acceptance Test
+
+1. Record the production URL and deployed Git commit.
+2. Submit a low-risk test request with a small document and confirm all expected Supabase rows plus both request-submission emails.
+3. Log in as admin, open `/admin/overview`, then open the request and confirm the status card, next action, customer summary, checklist, timeline, and internal/customer-visible separation.
+4. Send a structured missing-document request. Confirm the `customer_messages` row, `email_status='sent'`, activity entry, request status, and delivered email.
+5. Log in as the matching customer. Confirm the message and requested checklist items, then upload the missing document.
+6. Confirm the admin upload notification email, `request_files` metadata, `under_review` checklist status, and review-queue entry.
+7. Reject the document with a safe correction reason. Confirm the customer sees the reason but no internal notes.
+8. Upload a replacement as the customer. Confirm `customer_replaced_file` activity and the current replacement in the review queue.
+9. Accept the replacement. Confirm the portal shows `accepted` and no further upload is requested.
+10. Run the cross-customer, customer-to-admin, private-file, and secret-exposure negative tests before signing off.
+
+## Deployment Runbook
+
+1. **Pull latest main:** confirm a clean worktree, fetch origin, and run `git pull --ff-only origin main`.
+2. **Verify locally:** run `npm run lint`, `npm run build`, `git diff --check`, and `npm audit --audit-level=moderate` when registry access is available.
+3. **Apply migration if any:** inspect new files under `supabase/migrations`. Apply only the reviewed live-safe migration manually and verify columns, constraints, indexes, grants, and RLS. Never run `supabase/schema.sql` on the existing live project.
+4. **Push:** push the reviewed commits normally. Never force push and never commit environment files or secrets.
+5. **Wait for Vercel:** confirm the deployment succeeds and is tied to the expected commit.
+6. **Smoke test:** check the public, admin, overview, document-review, login, and portal routes listed above.
+7. **Acceptance test:** execute the manual live test and record evidence for persistence, email delivery, customer visibility, uploads, and document review.
+8. **Rollback:** if application behavior regresses, roll Vercel back to the last accepted deployment. If a database migration was applied, do not improvise a rollback; assess forward compatibility and use a separately reviewed corrective/down migration.
+
+### Supabase migration ledger
+
+- Applied live: `202607100001_phase3a_customer_portal_live_fix.sql` — Phase 3A customer portal/RLS hardening.
+- Applied live: `202607100002_phase3b_customer_messages.sql` — Phase 3B structured customer messages.
+- Phase 3C: no migration required.
+- Phase 4A–4E MVP completion sprint: no migration required.
+- Permanent safety rule: never run `supabase/schema.sql` on the existing live Supabase project.
