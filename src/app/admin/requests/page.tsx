@@ -80,7 +80,10 @@ export default async function AdminRequestsPage({ searchParams }: AdminRequestsP
               Service requests
             </h1>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            <Link href="/admin/document-review" className="rounded-md bg-navy-950 px-4 py-2 text-sm font-semibold text-white">
+              Document Review
+            </Link>
             <Link href="/api/admin/export" className="rounded-md bg-teal-500 px-4 py-2 text-sm font-semibold text-navy-950">
               Export CSV
             </Link>

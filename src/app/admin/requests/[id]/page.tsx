@@ -126,9 +126,14 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <Link href="/admin/requests" className="text-sm font-semibold text-teal-700">
-          Back to requests
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link href="/admin/requests" className="text-sm font-semibold text-teal-700">
+            Back to requests
+          </Link>
+          <Link href="/admin/document-review" className="text-sm font-semibold text-teal-700">
+            Document Review
+          </Link>
+        </div>
         <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">
             <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">

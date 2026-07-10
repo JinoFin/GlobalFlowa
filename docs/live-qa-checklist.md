@@ -35,6 +35,7 @@ Security note:
 - For existing Phase 2C live projects, confirm `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` has been run before Phase 3A QA.
 - For existing Phase 3A live projects, apply only `supabase/migrations/202607100002_phase3b_customer_messages.sql` before Phase 3B QA. Do not re-run `schema.sql` on live.
 - Confirm `customer_messages` has RLS enabled and the customer policy is select-only for customer-visible messages on the authenticated customer’s own requests.
+- Phase 3C has no database migration. It reuses existing Phase 3B file, checklist, request, and activity tables; deploy the application commit without running `schema.sql` on live.
 - Confirm the `request-documents` storage bucket is private.
 - Confirm at least one Supabase Auth admin user has a matching `profiles` row with role `admin` or `team`.
 - Confirm Resend has a verified sender domain for production use.
@@ -73,6 +74,7 @@ Security note:
 - Upload one missing or corrected document for a checklist item.
 - Add a short customer note.
 - Confirm the upload succeeds and the item moves to `under_review`.
+- After an admin rejects the upload, confirm the checklist item shows `incorrect`, clearly labels the correction request, displays only the customer-facing correction reason, and keeps the replacement upload form available.
 - Confirm the uploaded file appears in the portal linked-files list.
 - Open the customer file download link and confirm it uses `/api/portal/files/[id]`.
 - Confirm Customer A cannot access Customer B’s request detail URL.
@@ -92,6 +94,15 @@ Security note:
 - Download an uploaded file through `/api/admin/files/[id]`.
 - Confirm the signed URL opens the file and expires after a short time.
 - Confirm generated document checklist items appear grouped by category.
+- Open `/admin/document-review` from the “Document Review” dashboard link.
+- Confirm the default queue shows the current customer uploads with `uploaded` or `under_review` status, newest first.
+- Confirm company, customer email, request type, checklist item, file name, upload date, checklist status, request status, and priority appear where available.
+- Test All, Waiting for review, Accepted, Rejected / Needs correction, and Missing filters.
+- Search by company name, customer email, file name, and checklist item name; test oldest-first sorting.
+- Open the related request and download/view the file through `/api/admin/files/[id]`.
+- Accept one document and confirm it leaves the default queue and the checklist becomes `accepted`.
+- Reject another document, confirm a customer-facing note is required, and confirm the checklist becomes `incorrect`.
+- Confirm customers cannot access `/admin/document-review` or call `POST /api/admin/document-review`.
 - Update at least one checklist status to `under_review`.
 - Update one checklist status to `accepted`.
 - Mark one item as `missing`, `incorrect`, or `expired`.
@@ -118,6 +129,9 @@ Security note:
 - Confirm the physical file exists in the private `request-documents` bucket.
 - Confirm generated checklist rows exist in `request_document_checklist`.
 - Confirm customer uploads update the linked checklist item to `under_review`.
+- Confirm Phase 3C acceptance writes `document_accepted` to `request_activity_log` with checklist item, file ID, and reviewer.
+- Confirm Phase 3C rejection writes `document_rejected` with checklist item, file ID, reviewer, and customer-facing note.
+- Confirm Phase 3C does not create duplicate file/checklist tables and does not alter existing uploaded file rows.
 - Confirm `customer_messages` contains the request, author, subject, message, selected checklist UUIDs, recipient email, and `customer_visible=true`.
 - Confirm a successful email has `email_status='sent'` and `sent_at`; an email failure retains the row with `email_status='failed'` and no `sent_at`.
 - Confirm `request_activity_log` contains `customer_message_sent` with subject, selected checklist item IDs, and `sent_to_email`.
@@ -144,6 +158,8 @@ Security note:
 - Checklist items are generated and editable in admin.
 - Customers cannot edit checklist statuses directly; uploads and customer notes go through the secure portal API route.
 - Customer users cannot call `POST /api/admin/customer-message` and cannot insert, update, or delete `customer_messages`.
+- Customer users cannot access the document review queue or review API; admin/team authorization is checked inside both the page and route handler.
+- Rejecting a document exposes only the explicitly customer-facing checklist note, never unrelated internal admin notes.
 - Customer A cannot read customer-visible or hidden messages for Customer B’s request, and hidden messages are not displayed to their owner.
 - Emails send successfully or fail gracefully without deleting saved request data.
 - No public response exposes Supabase service-role keys, email API keys, storage paths beyond intended admin views, or stack traces.

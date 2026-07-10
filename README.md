@@ -1,4 +1,4 @@
-# Globalflowa MVP + Phase 3B Customer Messaging
+# Globalflowa MVP + Phase 3C Document Review Queue
 
 Professional B2B website and service request portal for Globalflowa, a Germany market-entry, compliance, warehouse, labeling, packing, and marketplace preparation partner for foreign sellers.
 
@@ -14,7 +14,7 @@ Professional B2B website and service request portal for Globalflowa, a Germany m
 - Basic Supabase Auth admin dashboard
 - Request list, filters, detail view, status updates, internal notes, missing-document marking, assignment field, activity history, and CSV export
 
-Phase 2A adds the automated document checklist. Phase 2B adds production/staging setup documentation, live QA guidance, and small runtime hardening for real deployments. Phase 3A adds the customer portal and missing-document upload flow. Phase 3B adds structured admin-to-customer document request messages by email and portal display. Pricing calculator, multilingual work, and chat/realtime messaging are intentionally not built yet.
+Phase 2A adds the automated document checklist. Phase 2B adds production/staging setup documentation, live QA guidance, and small runtime hardening for real deployments. Phase 3A adds the customer portal and missing-document upload flow. Phase 3B adds structured admin-to-customer document request messages by email and portal display. Phase 3C adds an admin document review queue for accepting customer uploads or requesting corrections. Pricing calculator, multilingual work, and chat/realtime messaging are intentionally not built yet.
 
 ## Phase 2C live QA status
 
@@ -119,6 +119,30 @@ supabase/migrations/202607100002_phase3b_customer_messages.sql
 ```
 
 For an existing live Phase 3A project, apply only that migration through the Supabase SQL editor or the project’s controlled migration process. Do not run `supabase/schema.sql` on the live database. The migration creates the table, indexes, grants, restricted helper functions, RLS policies, and PostgREST schema reload without changing existing customer request or checklist data.
+
+## Phase 3C admin document review queue
+
+Phase 3C adds `/admin/document-review`, an admin/team-only queue for reviewing the current customer upload linked to each checklist item.
+
+Queue capabilities:
+
+- Default view shows `uploaded` and `under_review` documents that need review.
+- Filters cover all documents, waiting for review, accepted, rejected/needs correction, and missing.
+- Search covers company name, customer email, uploaded file name, and checklist item name.
+- Results sort newest-first by default with an oldest-first option.
+- Each result shows company, customer email, request type, checklist item, file, upload time, checklist status, request status, and priority when available.
+- Quick actions open the request, use the existing protected admin file download route, accept the document, or request a correction with a required customer-facing note.
+
+Review behavior:
+
+- `POST /api/admin/document-review` re-verifies the authenticated admin/team profile and validates the action, request, checklist item, and file with Zod.
+- The route verifies that the file is still the current customer upload linked to the checklist item before updating anything.
+- Accepting changes the checklist status to `accepted`, hides any previous customer-visible correction note, and logs `document_accepted`.
+- Rejecting changes the checklist status to `incorrect`, stores the correction reason in the existing customer-visible checklist note, keeps the item visible, and logs `document_rejected`.
+- The customer portal highlights the correction request and retains the existing replacement upload form under the affected checklist item.
+- Internal admin notes are never exposed by the review queue; only the note entered in the explicitly customer-facing rejection field is published.
+
+Phase 3C reuses `request_files`, `request_document_checklist`, `service_requests`, and `request_activity_log`. No new columns or tables are required, so there is no Phase 3C database migration to apply and `supabase/schema.sql` is unchanged. Deploy the application commit only; do not run `schema.sql` on the live Phase 3B database.
 
 ## Phase 2A document checklist
 
@@ -365,7 +389,9 @@ Routes:
 - `/admin/login`
 - `/admin/requests`
 - `/admin/requests/[id]`
+- `/admin/document-review`
 - `/admin/services`
+- `/api/admin/document-review`
 - `/api/admin/export`
 - `/api/admin/customer-message`
 

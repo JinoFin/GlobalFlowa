@@ -314,6 +314,11 @@ function ChecklistItemCard({
             </span>
           </div>
           <p className="mt-2 text-sm leading-6 text-navy-650">{item.description}</p>
+          {item.status === "incorrect" ? (
+            <p className="mt-3 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700">
+              Correction requested. Review the reason below and upload a corrected file under this item.
+            </p>
+          ) : null}
           {item.admin_note_customer_visible && item.admin_note ? (
             <p className="mt-3 rounded-md bg-white px-3 py-2 text-sm text-navy-700">
               Globalflowa note: {item.admin_note}
