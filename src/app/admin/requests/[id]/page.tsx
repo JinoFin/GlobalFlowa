@@ -75,6 +75,16 @@ type ActivityRow = {
   created_at: string;
 };
 
+type CustomerMessageRow = {
+  id: string;
+  subject: string;
+  message: string;
+  email_status: string;
+  customer_visible: boolean;
+  created_at: string;
+  sent_at: string | null;
+};
+
 export default async function RequestDetailPage({ params }: RequestDetailPageProps) {
   const { id } = await params;
   let supabase;
@@ -82,7 +92,10 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   try {
     supabase = await createSupabaseServerClient();
   } catch (error) {
-    return <ConfigNotice message={error instanceof Error ? error.message : "Supabase is not configured."} />;
+    console.error("Admin request detail setup failed", {
+      reason: error instanceof Error ? error.message : "unknown error",
+    });
+    return <ConfigNotice message="Admin request detail is not configured." />;
   }
 
   const { data: userData } = await supabase.auth.getUser();
@@ -93,7 +106,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
     redirect("/portal/requests");
   }
 
-  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }] =
+  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }, { data: customerMessages }] =
     await Promise.all([
       supabase.from("service_requests").select("*").eq("id", id).single(),
       supabase.from("request_services").select("service_name, service_slug").eq("request_id", id),
@@ -102,6 +115,11 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
       supabase.from("request_document_checklist").select("*").eq("request_id", id).order("sort_order"),
       supabase.from("admin_notes").select("*").eq("request_id", id).order("created_at", { ascending: false }),
       supabase.from("request_activity_log").select("*").eq("request_id", id).order("created_at", { ascending: false }),
+      supabase
+        .from("customer_messages")
+        .select("id, subject, message, email_status, customer_visible, created_at, sent_at")
+        .eq("request_id", id)
+        .order("created_at", { ascending: false }),
     ]);
 
   if (!request) {
@@ -110,6 +128,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
 
   const requestRow = request as RequestRow;
   const checklistRows = (checklist ?? []) as AdminChecklistItem[];
+  const nextAction = getAdminNextAction(requestRow.status, checklistRows);
   const customerActionItems = checklistRows
     .filter(
       (item) =>
@@ -126,26 +145,46 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link href="/admin/requests" className="text-sm font-semibold text-teal-700">
-            Back to requests
-          </Link>
-          <Link href="/admin/document-review" className="text-sm font-semibold text-teal-700">
-            Document Review
-          </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm font-semibold text-teal-700">
+          <div className="flex flex-wrap gap-4">
+            <Link href="/admin/overview">Overview</Link>
+            <Link href="/admin/requests">Requests</Link>
+          </div>
+          <Link href="/admin/document-review">Document Review</Link>
         </div>
         <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">
             <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
-                {requestRow.status}
-              </p>
-              <h1 className="mt-2 text-3xl font-semibold text-navy-950">
-                {requestRow.company_name}
-              </h1>
-              <p className="mt-2 text-navy-650">
-                {requestRow.main_service} · {new Date(requestRow.created_at).toLocaleString()}
-              </p>
+              <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
+                    Request status
+                  </p>
+                  <h1 className="mt-2 text-3xl font-semibold text-navy-950">
+                    {requestRow.company_name}
+                  </h1>
+                  <p className="mt-2 text-navy-650">
+                    {requestRow.main_service} · {new Date(requestRow.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <span className="w-fit rounded-full bg-teal-50 px-3 py-1 text-sm font-semibold text-teal-800">
+                  {requestRow.status}
+                </span>
+              </div>
+
+              <div className="mt-6 rounded-md border border-teal-200 bg-teal-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-800">
+                  Next recommended action
+                </p>
+                <h2 className="mt-2 text-lg font-semibold text-navy-950">{nextAction.title}</h2>
+                <p className="mt-1 text-sm text-navy-650">{nextAction.description}</p>
+                <Link
+                  href={nextAction.href}
+                  className="mt-3 inline-flex text-sm font-semibold text-teal-800 underline decoration-teal-300 underline-offset-4"
+                >
+                  {nextAction.linkLabel}
+                </Link>
+              </div>
             </section>
 
             <InfoGrid
@@ -173,21 +212,43 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
             />
 
             <AnswersSection answers={(answers ?? []) as AnswerRow[]} />
-            <FilesSection files={(files ?? []) as FileRow[]} />
-            <DocumentChecklistSection
-              requestId={requestRow.id}
-              initialItems={checklistRows}
-              files={(files ?? []) as AdminFileOption[]}
+
+            <SectionLabel
+              title="Document status"
+              description="Customer uploads and the review state of every checklist requirement."
             />
-            <CustomerMessageSection
-              requestId={requestRow.id}
-              actionItems={customerActionItems}
+            <FilesSection files={(files ?? []) as FileRow[]} />
+            <div id="document-checklist" className="scroll-mt-6">
+              <DocumentChecklistSection
+                requestId={requestRow.id}
+                initialItems={checklistRows}
+                files={(files ?? []) as AdminFileOption[]}
+              />
+            </div>
+
+            <SectionLabel
+              title="Customer communication"
+              description="Messages in this section are customer-facing. Internal notes remain separate below."
+            />
+            <CustomerMessagesHistory messages={(customerMessages ?? []) as CustomerMessageRow[]} />
+            <div id="customer-message" className="scroll-mt-6">
+              <CustomerMessageSection
+                requestId={requestRow.id}
+                actionItems={customerActionItems}
+              />
+            </div>
+
+            <SectionLabel
+              title="Internal operations"
+              description="Admin notes and request activity are visible to the Globalflowa team only unless a note was explicitly marked customer-visible."
             />
             <NotesSection notes={(notes ?? []) as NoteRow[]} />
             <ActivitySection activity={(activity ?? []) as ActivityRow[]} />
           </div>
 
-          <RequestActions requestId={requestRow.id} currentStatus={requestRow.status} />
+          <div id="admin-actions" className="scroll-mt-6">
+            <RequestActions requestId={requestRow.id} currentStatus={requestRow.status} />
+          </div>
         </div>
       </div>
     </div>
@@ -314,24 +375,139 @@ function NotesSection({ notes }: { notes: NoteRow[] }) {
   );
 }
 
-function ActivitySection({ activity }: { activity: ActivityRow[] }) {
+function CustomerMessagesHistory({ messages }: { messages: CustomerMessageRow[] }) {
   return (
     <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">
+      <h2 className="text-xl font-semibold text-navy-950">Customer-visible message history</h2>
+      {messages.length ? (
+        <div className="mt-4 space-y-3">
+          {messages.map((message) => (
+            <article key={message.id} className="rounded-md border border-teal-100 bg-teal-50/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-navy-950">{message.subject}</h3>
+                  <p className="mt-1 text-xs text-navy-500">
+                    {new Date(message.sent_at ?? message.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-teal-800">
+                  Email {message.email_status}
+                </span>
+              </div>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-navy-650">{message.message}</p>
+              {!message.customer_visible ? (
+                <p className="mt-3 text-xs font-semibold text-amber-800">Hidden from the customer portal</p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-navy-650">No customer messages have been sent for this request yet.</p>
+      )}
+    </section>
+  );
+}
+
+function ActivitySection({ activity }: { activity: ActivityRow[] }) {
+  return (
+    <section id="activity-history" className="scroll-mt-6 rounded-md border border-navy-100 bg-white p-6 shadow-sm">
       <h2 className="text-xl font-semibold text-navy-950">Activity history</h2>
       {activity.length ? (
-        <ul className="mt-4 space-y-3 text-sm text-navy-650">
+        <ol className="mt-5 border-l border-navy-200 pl-5 text-sm text-navy-650">
           {activity.map((item) => (
-            <li key={item.id} className="rounded-md bg-navy-50 p-3">
-              <span className="font-semibold text-navy-950">{item.action}</span>
-              <span className="block text-xs">{item.actor_type} · {new Date(item.created_at).toLocaleString()}</span>
+            <li key={item.id} className="relative pb-5 last:pb-0">
+              <span className="absolute -left-[1.55rem] top-1 h-3 w-3 rounded-full border-2 border-white bg-teal-600" />
+              <p className="font-semibold text-navy-950">{formatActivityAction(item.action)}</p>
+              <p className="mt-1 text-xs">
+                {item.actor_type} · {new Date(item.created_at).toLocaleString()}
+              </p>
+              {describeActivity(item.details) ? (
+                <p className="mt-2 text-sm text-navy-650">{describeActivity(item.details)}</p>
+              ) : null}
             </li>
           ))}
-        </ul>
+        </ol>
       ) : (
         <p className="mt-3 text-sm text-navy-650">No activity yet.</p>
       )}
     </section>
   );
+}
+
+function SectionLabel({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="pt-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Workspace</p>
+      <h2 className="mt-1 text-2xl font-semibold text-navy-950">{title}</h2>
+      <p className="mt-2 text-sm text-navy-650">{description}</p>
+    </div>
+  );
+}
+
+function getAdminNextAction(status: string, checklist: AdminChecklistItem[]) {
+  const reviewCount = checklist.filter((item) => ["uploaded", "under_review"].includes(item.status)).length;
+  const customerActionCount = checklist.filter(
+    (item) => item.required && ["required", "missing", "incorrect", "expired"].includes(item.status),
+  ).length;
+  const requiredItems = checklist.filter((item) => item.required);
+  const allRequiredAccepted = requiredItems.length > 0 && requiredItems.every((item) => item.status === "accepted");
+
+  if (status === "Completed") {
+    return {
+      title: "Request completed",
+      description: "No operational action is required unless the case needs to be reopened.",
+      href: "#activity-history",
+      linkLabel: "Review timeline",
+    };
+  }
+  if (reviewCount > 0) {
+    return {
+      title: "Review documents",
+      description: `${reviewCount} customer ${reviewCount === 1 ? "document is" : "documents are"} waiting for review.`,
+      href: "/admin/document-review",
+      linkLabel: "Open document review",
+    };
+  }
+  if (customerActionCount > 0 && status === "Waiting for Customer") {
+    return {
+      title: "Waiting for customer upload",
+      description: `${customerActionCount} required ${customerActionCount === 1 ? "item needs" : "items need"} customer action.`,
+      href: "#customer-message",
+      linkLabel: "Review customer communication",
+    };
+  }
+  if (customerActionCount > 0) {
+    return {
+      title: "Send customer message",
+      description: "Tell the customer which missing or corrected documents should be uploaded through the portal.",
+      href: "#customer-message",
+      linkLabel: "Prepare customer message",
+    };
+  }
+  if (allRequiredAccepted || status === "In Progress" || status === "Submitted to Authority") {
+    return {
+      title: "Mark completed when work is finished",
+      description: "Document requirements are clear. Complete the remaining service work, then update the request status.",
+      href: "#admin-actions",
+      linkLabel: "Open admin actions",
+    };
+  }
+  return {
+    title: "Review request details",
+    description: "Confirm the service scope and checklist before moving the request forward.",
+    href: "#document-checklist",
+    linkLabel: "Review checklist",
+  };
+}
+
+function formatActivityAction(action: string) {
+  return action.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function describeActivity(details: Record<string, unknown>) {
+  const values = [details.checklist_item, details.file_name, details.subject, details.status]
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  return values.join(" · ");
 }
 
 function ConfigNotice({ message }: { message: string }) {

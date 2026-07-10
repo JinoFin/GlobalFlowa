@@ -86,7 +86,10 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
   try {
     supabase = await createSupabaseServerClient();
   } catch (error) {
-    return <PortalConfigNotice message={error instanceof Error ? error.message : "Supabase auth is not configured."} />;
+    console.error("Customer request detail setup failed", {
+      reason: error instanceof Error ? error.message : "unknown error",
+    });
+    return <PortalConfigNotice message="Customer portal is not configured." />;
   }
 
   const { data: userData } = await supabase.auth.getUser();
@@ -122,6 +125,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
         .from("admin_notes")
         .select("id, note, missing_documents, created_at")
         .eq("request_id", id)
+        .eq("customer_visible", true)
         .order("created_at", { ascending: false }),
       supabase
         .from("customer_messages")
@@ -142,6 +146,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
   const customerMessageRows = (customerMessages ?? []) as CustomerMessageRow[];
   const actionItems = checklistRows.filter((item) => needsCustomerAction(item));
   const summary = summarizeChecklist(checklistRows);
+  const nextAction = getCustomerNextAction(requestRow.status, checklistRows);
 
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
@@ -181,6 +186,19 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
                 {summary.accepted}/{summary.total} required documents accepted
                 {summary.action ? ` · ${summary.action} need your attention` : ""}
               </p>
+              <div className={`mt-5 rounded-md border p-4 ${nextAction.tone}`}>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em]">Next customer action</p>
+                <h3 className="mt-2 font-semibold text-navy-950">{nextAction.title}</h3>
+                <p className="mt-1 text-sm text-navy-650">{nextAction.description}</p>
+                {nextAction.href ? (
+                  <Link
+                    href={nextAction.href}
+                    className="mt-3 inline-flex text-sm font-semibold text-teal-800 underline decoration-teal-300 underline-offset-4"
+                  >
+                    {nextAction.linkLabel}
+                  </Link>
+                ) : null}
+              </div>
             </section>
 
             <MessagesFromGlobalflowa
@@ -199,7 +217,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
               </section>
             ) : null}
 
-            <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">
+            <section id="document-checklist" className="scroll-mt-6 rounded-md border border-navy-100 bg-white p-6 shadow-sm">
               <h2 className="text-xl font-semibold text-navy-950">Document checklist</h2>
               <p className="mt-2 text-sm leading-6 text-navy-650">
                 Final requirements depend on Globalflowa review. Accepted items are complete; missing, incorrect, expired, or required items may need an upload.
@@ -509,4 +527,44 @@ function needsCustomerAction(item: ChecklistRow) {
     ["required", "missing", "incorrect", "expired"].includes(item.status) ||
     !item.linked_file_id
   );
+}
+
+function getCustomerNextAction(status: string, checklist: ChecklistRow[]) {
+  const actionItems = checklist.filter((item) => needsCustomerAction(item));
+  const waitingForReview = checklist.filter((item) => ["uploaded", "under_review"].includes(item.status));
+
+  if (actionItems.length > 0) {
+    return {
+      title: "Upload missing or corrected documents",
+      description: `${actionItems.length} required ${actionItems.length === 1 ? "item needs" : "items need"} your attention. Upload files under the matching checklist items.`,
+      href: "#document-checklist",
+      linkLabel: "Go to documents needing action",
+      tone: "border-red-200 bg-red-50 text-red-800",
+    };
+  }
+  if (waitingForReview.length > 0) {
+    return {
+      title: "No upload needed right now",
+      description: `${waitingForReview.length} uploaded ${waitingForReview.length === 1 ? "document is" : "documents are"} waiting for Globalflowa review.`,
+      href: "#document-checklist",
+      linkLabel: "View uploaded documents",
+      tone: "border-blue-200 bg-blue-50 text-blue-800",
+    };
+  }
+  if (status === "Completed") {
+    return {
+      title: "Request completed",
+      description: "Globalflowa has completed this request. Contact the team if you need further assistance.",
+      href: null,
+      linkLabel: null,
+      tone: "border-teal-200 bg-teal-50 text-teal-800",
+    };
+  }
+  return {
+    title: "Wait for the next Globalflowa update",
+    description: "There is no document action for you right now. New requests will appear in Messages from Globalflowa.",
+    href: null,
+    linkLabel: null,
+    tone: "border-navy-200 bg-navy-50 text-navy-700",
+  };
 }
