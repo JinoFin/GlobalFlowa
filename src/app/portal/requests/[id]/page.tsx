@@ -71,6 +71,14 @@ type NoteRow = {
   created_at: string;
 };
 
+type CustomerMessageRow = {
+  id: string;
+  created_at: string;
+  subject: string;
+  message: string;
+  checklist_item_ids: string[];
+};
+
 export default async function PortalRequestDetailPage({ params }: RequestDetailPageProps) {
   const { id } = await params;
   let supabase;
@@ -93,7 +101,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
     `email.ilike.${userData.user.email}`,
   ].join(",");
 
-  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }] =
+  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: customerMessages }] =
     await Promise.all([
       supabase
         .from("service_requests")
@@ -115,6 +123,12 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
         .select("id, note, missing_documents, created_at")
         .eq("request_id", id)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("customer_messages")
+        .select("id, created_at, subject, message, checklist_item_ids")
+        .eq("request_id", id)
+        .eq("customer_visible", true)
+        .order("created_at", { ascending: false }),
     ]);
 
   if (!request) {
@@ -125,6 +139,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
   const checklistRows = ((checklist ?? []) as ChecklistRow[]).sort((a, b) => a.sort_order - b.sort_order);
   const fileRows = (files ?? []) as FileRow[];
   const noteRows = (notes ?? []) as NoteRow[];
+  const customerMessageRows = (customerMessages ?? []) as CustomerMessageRow[];
   const actionItems = checklistRows.filter((item) => needsCustomerAction(item));
   const summary = summarizeChecklist(checklistRows);
 
@@ -167,6 +182,11 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
                 {summary.action ? ` · ${summary.action} need your attention` : ""}
               </p>
             </section>
+
+            <MessagesFromGlobalflowa
+              messages={customerMessageRows}
+              checklistItems={checklistRows}
+            />
 
             {actionItems.length ? (
               <section className="rounded-md border border-red-200 bg-red-50 p-5">
@@ -280,7 +300,10 @@ function ChecklistItemCard({
   const actionNeeded = needsCustomerAction(item);
 
   return (
-    <div className={`rounded-md border p-4 ${actionNeeded ? "border-red-200 bg-red-50" : "border-navy-100 bg-navy-50"}`}>
+    <div
+      id={`checklist-${item.id}`}
+      className={`scroll-mt-6 rounded-md border p-4 ${actionNeeded ? "border-red-200 bg-red-50" : "border-navy-100 bg-navy-50"}`}
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -325,6 +348,86 @@ function ChecklistItemCard({
       />
     </div>
   );
+}
+
+function MessagesFromGlobalflowa({
+  messages,
+  checklistItems,
+}: {
+  messages: CustomerMessageRow[];
+  checklistItems: ChecklistRow[];
+}) {
+  const checklistById = new Map(checklistItems.map((item) => [item.id, item]));
+
+  return (
+    <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">
+      <h2 className="text-xl font-semibold text-navy-950">Messages from Globalflowa</h2>
+      {messages.length ? (
+        <div className="mt-5 space-y-4">
+          {messages.map((message) => {
+            const relatedItems = message.checklist_item_ids
+              .map((itemId) => checklistById.get(itemId))
+              .filter((item): item is ChecklistRow => Boolean(item));
+
+            return (
+              <article key={message.id} className="rounded-md border border-teal-100 bg-teal-50/40 p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">
+                  {formatDate(message.created_at)}
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-navy-950">{message.subject}</h3>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-navy-650">
+                  {message.message}
+                </p>
+
+                {relatedItems.length ? (
+                  <div className="mt-4 rounded-md bg-white p-4">
+                    <h4 className="text-sm font-semibold text-navy-950">Documents requiring action</h4>
+                    <ul className="mt-3 space-y-3">
+                      {relatedItems.map((item) => (
+                        <li key={item.id} className="text-sm text-navy-650">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link
+                              href={`#checklist-${item.id}`}
+                              className="font-semibold text-navy-950 underline decoration-teal-300 underline-offset-4 hover:text-teal-700"
+                            >
+                              {item.title}
+                            </Link>
+                            <StatusBadge status={item.status} />
+                          </div>
+                          <p className="mt-1 text-xs">{getChecklistActionHint(item.status)}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-xs text-navy-500">
+                    The related checklist items are no longer available in the customer portal.
+                  </p>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-navy-650">
+          Globalflowa has not sent any messages for this request yet.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function getChecklistActionHint(status: string) {
+  if (["required", "missing", "incorrect", "expired"].includes(status)) {
+    return "Upload the missing or corrected file under this checklist item below.";
+  }
+  if (["uploaded", "under_review"].includes(status)) {
+    return "Your document is uploaded and awaiting Globalflowa review.";
+  }
+  if (status === "accepted") {
+    return "Globalflowa has accepted this document.";
+  }
+  return "No customer action is currently required.";
 }
 
 function InfoSection({ title, rows }: { title: string; rows: Array<[string, string | null]> }) {

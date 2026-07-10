@@ -23,6 +23,7 @@ export type AdminChecklistItem = {
   linked_file_id: string | null;
   required: boolean;
   sort_order: number;
+  customer_visible: boolean;
 };
 
 export type AdminFileOption = {

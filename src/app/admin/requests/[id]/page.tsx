@@ -5,6 +5,10 @@ import {
   type AdminChecklistItem,
   type AdminFileOption,
 } from "@/components/admin/document-checklist-section";
+import {
+  CustomerMessageSection,
+  type CustomerMessageChecklistItem,
+} from "@/components/admin/customer-message-section";
 import { RequestActions } from "@/components/admin/request-actions";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
@@ -105,6 +109,19 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   }
 
   const requestRow = request as RequestRow;
+  const checklistRows = (checklist ?? []) as AdminChecklistItem[];
+  const customerActionItems = checklistRows
+    .filter(
+      (item) =>
+        item.customer_visible &&
+        ["required", "missing", "incorrect", "expired"].includes(item.status),
+    )
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      category: item.category,
+      status: item.status,
+    })) satisfies CustomerMessageChecklistItem[];
 
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
@@ -154,8 +171,12 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
             <FilesSection files={(files ?? []) as FileRow[]} />
             <DocumentChecklistSection
               requestId={requestRow.id}
-              initialItems={(checklist ?? []) as AdminChecklistItem[]}
+              initialItems={checklistRows}
               files={(files ?? []) as AdminFileOption[]}
+            />
+            <CustomerMessageSection
+              requestId={requestRow.id}
+              actionItems={customerActionItems}
             />
             <NotesSection notes={(notes ?? []) as NoteRow[]} />
             <ActivitySection activity={(activity ?? []) as ActivityRow[]} />

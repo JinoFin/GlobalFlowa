@@ -166,6 +166,21 @@ create table if not exists public.admin_notes (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.customer_messages (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  request_id uuid not null references public.service_requests(id) on delete cascade,
+  author_id uuid references public.profiles(id),
+  subject text not null,
+  message text not null,
+  checklist_item_ids uuid[] not null default '{}',
+  sent_to_email text not null,
+  sent_at timestamptz,
+  email_status text not null default 'pending' check (email_status in ('pending', 'sent', 'failed')),
+  customer_visible boolean not null default true
+);
+
 create table if not exists public.request_activity_log (
   id uuid primary key default gen_random_uuid(),
   request_id uuid not null references public.service_requests(id) on delete cascade,
@@ -226,6 +241,9 @@ create index if not exists idx_request_files_linked_checklist_item_id on public.
 create index if not exists idx_document_templates_service_slug on public.document_templates(service_slug);
 create index if not exists idx_request_document_checklist_request_id on public.request_document_checklist(request_id);
 create index if not exists idx_request_document_checklist_status on public.request_document_checklist(status);
+create index if not exists idx_customer_messages_request_id on public.customer_messages(request_id);
+create index if not exists idx_customer_messages_sent_to_email on public.customer_messages(sent_to_email);
+create index if not exists idx_customer_messages_created_at on public.customer_messages(created_at);
 
 alter table public.profiles enable row level security;
 alter table public.services enable row level security;
@@ -239,6 +257,7 @@ alter table public.request_document_checklist enable row level security;
 alter table public.recommendation_sessions enable row level security;
 alter table public.recommendation_answers enable row level security;
 alter table public.admin_notes enable row level security;
+alter table public.customer_messages enable row level security;
 alter table public.request_activity_log enable row level security;
 
 grant select on public.services to anon, authenticated;
@@ -253,6 +272,8 @@ grant select, insert, update, delete on public.request_document_checklist to aut
 grant select, insert, update, delete on public.recommendation_sessions to authenticated;
 grant select, insert, update, delete on public.recommendation_answers to authenticated;
 grant select, insert, update, delete on public.admin_notes to authenticated;
+revoke all on public.customer_messages from anon, authenticated;
+grant select, insert, update on public.customer_messages to authenticated;
 grant select, insert, update, delete on public.request_activity_log to authenticated;
 
 create or replace function public.is_admin()
@@ -303,6 +324,10 @@ drop policy if exists "Admins can manage request document checklist" on public.r
 drop policy if exists "Admins can manage recommendation sessions" on public.recommendation_sessions;
 drop policy if exists "Admins can manage recommendation answers" on public.recommendation_answers;
 drop policy if exists "Admins can manage notes" on public.admin_notes;
+drop policy if exists "Admins can read customer messages" on public.customer_messages;
+drop policy if exists "Admins can insert customer messages" on public.customer_messages;
+drop policy if exists "Admins can update customer messages" on public.customer_messages;
+drop policy if exists "Customers can read own visible messages" on public.customer_messages;
 drop policy if exists "Admins can manage activity" on public.request_activity_log;
 drop policy if exists "Admins can read request documents" on storage.objects;
 
@@ -494,6 +519,38 @@ using (
   and exists (
     select 1 from public.service_requests sr
     where sr.id = admin_notes.request_id
+    and sr.customer_access_enabled = true
+    and (
+      sr.customer_user_id = (select auth.uid())
+      or lower(coalesce(sr.customer_email, sr.email)) = lower(coalesce((auth.jwt() ->> 'email'), ''))
+    )
+  )
+);
+
+create policy "Admins can read customer messages"
+on public.customer_messages for select
+to authenticated
+using (public.is_admin_or_team());
+
+create policy "Admins can insert customer messages"
+on public.customer_messages for insert
+to authenticated
+with check (public.is_admin_or_team());
+
+create policy "Admins can update customer messages"
+on public.customer_messages for update
+to authenticated
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
+
+create policy "Customers can read own visible messages"
+on public.customer_messages for select
+to authenticated
+using (
+  customer_visible = true
+  and exists (
+    select 1 from public.service_requests sr
+    where sr.id = customer_messages.request_id
     and sr.customer_access_enabled = true
     and (
       sr.customer_user_id = (select auth.uid())

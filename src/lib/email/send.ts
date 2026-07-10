@@ -1,3 +1,5 @@
+import "server-only";
+
 import { Resend } from "resend";
 import { getServiceBySlug } from "@/lib/catalog";
 import { groupChecklistByCategory, type GeneratedChecklistItem } from "@/lib/document-checklist";
@@ -99,6 +101,60 @@ export async function sendCustomerUploadEmail({
       `Admin request detail: ${adminUrl}`,
     ].join("\n"),
   });
+}
+
+export async function sendCustomerMessageEmail({
+  customerEmail,
+  companyName,
+  requestId,
+  subject,
+  message,
+  checklistItems,
+}: {
+  customerEmail: string;
+  companyName: string;
+  requestId: string;
+  subject: string;
+  message: string;
+  checklistItems: Array<{ title: string; status: string }>;
+}) {
+  const resend = getResend();
+  if (!resend) {
+    throw new Error("EMAIL_PROVIDER_API_KEY is not configured.");
+  }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
+  if (!siteUrl) {
+    throw new Error("NEXT_PUBLIC_SITE_URL is not configured.");
+  }
+
+  const fromEmail = process.env.EMAIL_FROM ?? "Globalflowa Portal <onboarding@resend.dev>";
+  const portalUrl = `${siteUrl}/portal/requests/${requestId}`;
+  const messageStartsWithGreeting = /^(hello|hi|dear)\b/i.test(message.trim());
+  const { error } = await resend.emails.send({
+    from: fromEmail,
+    to: customerEmail,
+    subject,
+    text: [
+      ...(messageStartsWithGreeting ? [message] : ["Hello,", "", message]),
+      "",
+      `Company / request: ${companyName}`,
+      `Request ID: ${requestId}`,
+      "",
+      "Documents requiring your attention:",
+      ...checklistItems.map((item) => `- ${item.title} (${formatEmailStatus(item.status)})`),
+      "",
+      "Please open your request in the customer portal to upload missing or corrected files:",
+      portalUrl,
+      "",
+      "Kind regards,",
+      "Globalflowa",
+    ].join("\n"),
+  });
+
+  if (error) {
+    throw new Error(error.message || "Email provider rejected the customer message.");
+  }
 }
 
 function buildInternalEmail(
@@ -209,6 +265,10 @@ function formatChecklistItems(items: GeneratedChecklistItem[]) {
       ...group.items.map((item) => `- ${item.title}${item.required ? "" : " (recommended)"}`),
     ].join("\n"))
     .join("\n\n");
+}
+
+function formatEmailStatus(status: string) {
+  return status.replaceAll("_", " ");
 }
 
 function formatObject(value: Record<string, unknown>) {

@@ -1,4 +1,4 @@
-# Globalflowa MVP + Phase 3A Customer Portal
+# Globalflowa MVP + Phase 3B Customer Messaging
 
 Professional B2B website and service request portal for Globalflowa, a Germany market-entry, compliance, warehouse, labeling, packing, and marketplace preparation partner for foreign sellers.
 
@@ -14,7 +14,7 @@ Professional B2B website and service request portal for Globalflowa, a Germany m
 - Basic Supabase Auth admin dashboard
 - Request list, filters, detail view, status updates, internal notes, missing-document marking, assignment field, activity history, and CSV export
 
-Phase 2A adds the automated document checklist. Phase 2B adds production/staging setup documentation, live QA guidance, and small runtime hardening for real deployments. Phase 3A adds the customer portal and missing-document upload flow. Pricing calculator and German/Chinese localization are intentionally not built yet.
+Phase 2A adds the automated document checklist. Phase 2B adds production/staging setup documentation, live QA guidance, and small runtime hardening for real deployments. Phase 3A adds the customer portal and missing-document upload flow. Phase 3B adds structured admin-to-customer document request messages by email and portal display. Pricing calculator, multilingual work, and chat/realtime messaging are intentionally not built yet.
 
 ## Phase 2C live QA status
 
@@ -92,6 +92,33 @@ Security and RLS notes:
 - Customers cannot read all requests, cannot access admin routes, cannot update checklist statuses, and cannot download files from another request.
 - Admin file downloads require an admin/team profile; customer file downloads use a separate customer route.
 - The Supabase service role key remains server-only and is never exposed to browser code.
+
+## Phase 3B customer document request messaging
+
+Phase 3B gives admin/team users a structured workflow for requesting missing, incorrect, expired, or otherwise required documents from a customer.
+
+- The admin request detail page lists customer-visible checklist items with `required`, `missing`, `incorrect`, or `expired` status.
+- Admin/team users can select items, edit a subject and customer-facing message, preview the selection, and send through `POST /api/admin/customer-message`.
+- The route re-verifies the authenticated user and admin/team profile, validates the JSON payload with Zod, confirms every checklist item belongs to the request and requires customer action, and resolves `customer_email` with `email` as fallback.
+- A `customer_messages` row is saved with `pending` status before email is attempted.
+- Successful sends set `email_status='sent'` and `sent_at`; failed sends keep the saved message and set `email_status='failed'`.
+- Every completed attempt adds `customer_message_sent` to `request_activity_log`. Requests in `New`, `In Review`, or `Missing Documents` move to `Waiting for Customer`.
+- The customer request detail page shows “Messages from Globalflowa,” related checklist items, current document status, action guidance, and links to the existing per-item upload form.
+
+Phase 3B database objects:
+
+- `customer_messages` with request, author, subject, message, checklist UUID array, recipient, delivery status, timestamps, and customer visibility.
+- Indexes on `request_id`, `sent_to_email`, and `created_at`.
+- Admin/team select, insert, and update policies using `public.is_admin_or_team()`.
+- A customer select-only policy limited to customer-visible messages on requests owned by the authenticated customer. No customer insert, update, or delete policy exists.
+
+The live-safe migration is:
+
+```text
+supabase/migrations/202607100002_phase3b_customer_messages.sql
+```
+
+For an existing live Phase 3A project, apply only that migration through the Supabase SQL editor or the project’s controlled migration process. Do not run `supabase/schema.sql` on the live database. The migration creates the table, indexes, grants, restricted helper functions, RLS policies, and PostgREST schema reload without changing existing customer request or checklist data.
 
 ## Phase 2A document checklist
 
@@ -236,7 +263,9 @@ For Phase 2A, re-run `supabase/schema.sql` and `supabase/seed.sql` on existing p
 
 Public users do not receive unrestricted checklist-table access. The server route creates request checklist rows with the service role key after validating a submission. Admin/team users can read and update checklist rows through Supabase Auth and RLS.
 
-For existing Phase 2C live projects, do not re-run the whole schema as a migration substitute. Run `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` to add the Phase 3A customer portal fields, file metadata, customer RLS policies, and SECURITY DEFINER admin role helpers. Existing admin users keep access only if their `profiles.role` is explicitly `admin` or `team`.
+For existing Phase 2C live projects, do not re-run the whole schema as a migration substitute. First run `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` to add the Phase 3A customer portal fields, file metadata, customer RLS policies, and SECURITY DEFINER admin role helpers. Existing admin users keep access only if their `profiles.role` is explicitly `admin` or `team`.
+
+For an existing Phase 3A live project, run only `supabase/migrations/202607100002_phase3b_customer_messages.sql`. Do not run `schema.sql` on live. After the migration, confirm `customer_messages` has RLS enabled, authenticated customers have select-only access through the ownership policy, and no `anon` access or customer mutation policy exists.
 
 For new projects, run only:
 
@@ -338,6 +367,7 @@ Routes:
 - `/admin/requests/[id]`
 - `/admin/services`
 - `/api/admin/export`
+- `/api/admin/customer-message`
 
 Admins can filter requests by status, service, urgency, country, and date, open a request detail page, review answers/files/activity, update status, add notes, mark missing documents, assign a profile UUID, and export request data as CSV.
 
@@ -357,6 +387,19 @@ Phase 3A admin/customer coordination:
 - Add a checklist admin note and enable “Show this admin note in the customer portal” when the customer should see the correction reason.
 - Use the admin note visibility checkbox only for customer-safe notes; internal notes remain private by default.
 - Customer uploads appear in the same uploaded files list and can be linked to checklist items.
+
+Phase 3B messaging checks:
+
+1. Mark one customer-visible checklist item `missing`, `incorrect`, or `expired`, or leave it `required`.
+2. Open the request detail page and select it under “Customer Message / Missing Documents Request.”
+3. Send the default or edited subject/message and confirm the UI reports whether email sent or only the portal message was saved.
+4. Confirm `customer_messages` contains the selected checklist UUIDs and the correct `sent_to_email` fallback.
+5. Confirm `request_activity_log.action='customer_message_sent'` and the request status is `Waiting for Customer` when the prior status was eligible.
+6. Log in as the matching customer, open `/portal/requests/[id]`, and confirm the message and related item appear near the top.
+7. Follow the related item link, upload a corrected file, and confirm the existing upload/checklist review flow still works.
+8. Verify a different customer cannot read the message and a customer session cannot call the admin messaging route.
+9. For email QA, confirm the email subject, company/request context, admin message, document list, and absolute `${NEXT_PUBLIC_SITE_URL}/portal/requests/[requestId]` link.
+10. Simulate or observe an email-provider failure and confirm the row remains with `email_status='failed'`.
 
 ## How checklist generation works
 

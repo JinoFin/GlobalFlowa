@@ -33,6 +33,8 @@ Security note:
 - Confirm Vercel has all environment variables for the tested environment.
 - For new Supabase projects, confirm `schema.sql` and `seed.sql` have been run.
 - For existing Phase 2C live projects, confirm `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` has been run before Phase 3A QA.
+- For existing Phase 3A live projects, apply only `supabase/migrations/202607100002_phase3b_customer_messages.sql` before Phase 3B QA. Do not re-run `schema.sql` on live.
+- Confirm `customer_messages` has RLS enabled and the customer policy is select-only for customer-visible messages on the authenticated customer’s own requests.
 - Confirm the `request-documents` storage bucket is private.
 - Confirm at least one Supabase Auth admin user has a matching `profiles` row with role `admin` or `team`.
 - Confirm Resend has a verified sender domain for production use.
@@ -64,6 +66,9 @@ Security note:
 - Confirm only requests for that customer email/user ID appear.
 - Open `/portal/requests/[id]`.
 - Confirm request status, selected services, submitted information, visible checklist items, and customer-visible notes display.
+- Confirm “Messages from Globalflowa” appears near the top, including the empty-state text when no message has been sent.
+- After an admin sends a Phase 3B request, confirm its date, subject, message, related checklist items, statuses, and action hints display.
+- Follow a related checklist item link and confirm the corrected/missing file can be uploaded directly under that item.
 - Confirm missing, incorrect, expired, and required-without-file checklist items are highlighted.
 - Upload one missing or corrected document for a checklist item.
 - Add a short customer note.
@@ -90,6 +95,10 @@ Security note:
 - Update at least one checklist status to `under_review`.
 - Update one checklist status to `accepted`.
 - Mark one item as `missing`, `incorrect`, or `expired`.
+- In “Customer Message / Missing Documents Request,” confirm all customer-visible `required`, `missing`, `incorrect`, and `expired` items have checkboxes.
+- Use “Select all action items,” edit the subject/message if needed, review the selected-item preview, and click “Send request to customer.”
+- Confirm the UI shows a loading state followed by sent, saved-with-email-failure, or error feedback.
+- Confirm a request in `New`, `In Review`, or `Missing Documents` changes to `Waiting for Customer` after the message attempt is recorded.
 - Add an admin note to a checklist item.
 - Mark a checklist admin note visible to the customer and confirm it appears in the portal.
 - Link an uploaded file to a checklist item.
@@ -109,11 +118,15 @@ Security note:
 - Confirm the physical file exists in the private `request-documents` bucket.
 - Confirm generated checklist rows exist in `request_document_checklist`.
 - Confirm customer uploads update the linked checklist item to `under_review`.
+- Confirm `customer_messages` contains the request, author, subject, message, selected checklist UUIDs, recipient email, and `customer_visible=true`.
+- Confirm a successful email has `email_status='sent'` and `sent_at`; an email failure retains the row with `email_status='failed'` and no `sent_at`.
+- Confirm `request_activity_log` contains `customer_message_sent` with subject, selected checklist item IDs, and `sent_to_email`.
 - Confirm checklist rows link to uploaded file IDs where expected.
 - Confirm `request_activity_log` contains submission, admin update, and customer upload/note events.
 - Confirm internal email was sent to `INTERNAL_NOTIFICATION_EMAIL`.
 - Confirm customer confirmation email was sent to the request email.
 - Confirm customer upload notification email was sent to `INTERNAL_NOTIFICATION_EMAIL` when email is configured.
+- Confirm the Phase 3B customer email uses the saved subject and includes greeting, company/request context, admin message, requested-document list, Globalflowa signature, and the direct portal request URL.
 - If email fails, confirm the request and checklist still remain saved.
 
 ## Three Required Sample Flows
@@ -130,5 +143,7 @@ Security note:
 - Customer portal files are private and only downloadable by the owning authenticated customer or authenticated admin/team users.
 - Checklist items are generated and editable in admin.
 - Customers cannot edit checklist statuses directly; uploads and customer notes go through the secure portal API route.
+- Customer users cannot call `POST /api/admin/customer-message` and cannot insert, update, or delete `customer_messages`.
+- Customer A cannot read customer-visible or hidden messages for Customer B’s request, and hidden messages are not displayed to their owner.
 - Emails send successfully or fail gracefully without deleting saved request data.
 - No public response exposes Supabase service-role keys, email API keys, storage paths beyond intended admin views, or stack traces.
