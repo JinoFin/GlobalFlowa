@@ -316,11 +316,12 @@ function ChecklistItemCard({
   files: FileRow[];
 }) {
   const actionNeeded = needsCustomerAction(item);
+  const lastUploaded = files[0] ?? null;
 
   return (
     <div
       id={`checklist-${item.id}`}
-      className={`scroll-mt-6 rounded-md border p-4 ${actionNeeded ? "border-red-200 bg-red-50" : "border-navy-100 bg-navy-50"}`}
+      className={`scroll-mt-6 rounded-md border p-4 ${getChecklistCardTone(item.status, actionNeeded)}`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -345,6 +346,9 @@ function ChecklistItemCard({
           {item.customer_note ? (
             <p className="mt-2 text-xs text-navy-650">Your note: {item.customer_note}</p>
           ) : null}
+          <p className="mt-3 text-sm font-semibold text-navy-700">
+            {getChecklistActionHint(item.status)}
+          </p>
         </div>
       </div>
 
@@ -361,6 +365,11 @@ function ChecklistItemCard({
               </li>
             ))}
           </ul>
+          {lastUploaded ? (
+            <p className="mt-2 text-xs font-semibold text-navy-650">
+              Last uploaded: {lastUploaded.file_name} · {formatDate(lastUploaded.created_at)}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -368,6 +377,7 @@ function ChecklistItemCard({
         requestId={requestId}
         checklistItemId={item.id}
         existingNote={item.customer_note}
+        isReplacement={["incorrect", "expired"].includes(item.status)}
       />
     </div>
   );
@@ -451,6 +461,13 @@ function getChecklistActionHint(status: string) {
     return "Globalflowa has accepted this document.";
   }
   return "No customer action is currently required.";
+}
+
+function getChecklistCardTone(status: string, actionNeeded: boolean) {
+  if (actionNeeded) return "border-red-200 bg-red-50";
+  if (status === "accepted") return "border-teal-200 bg-teal-50/50";
+  if (["uploaded", "under_review"].includes(status)) return "border-blue-200 bg-blue-50/50";
+  return "border-navy-100 bg-navy-50";
 }
 
 function InfoSection({ title, rows }: { title: string; rows: Array<[string, string | null]> }) {

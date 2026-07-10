@@ -20,6 +20,8 @@ type ChecklistRow = {
   request_id: string;
   title: string;
   customer_visible: boolean;
+  status: string;
+  linked_file_id: string | null;
 };
 
 export async function POST(request: Request) {
@@ -28,8 +30,11 @@ export async function POST(request: Request) {
   try {
     authClient = await createSupabaseServerClient();
   } catch (error) {
+    console.error("Customer upload auth setup failed", {
+      reason: error instanceof Error ? error.message : "unknown error",
+    });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Supabase auth is not configured." },
+      { error: "Customer uploads are not configured." },
       { status: 503 },
     );
   }
@@ -44,8 +49,11 @@ export async function POST(request: Request) {
   try {
     serviceClient = getSupabaseServiceClient();
   } catch (error) {
+    console.error("Customer upload service setup failed", {
+      reason: error instanceof Error ? error.message : "unknown error",
+    });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Supabase service role is not configured." },
+      { error: "Customer uploads are temporarily unavailable." },
       { status: 503 },
     );
   }
@@ -80,7 +88,7 @@ export async function POST(request: Request) {
 
   const { data: checklistRow, error: checklistError } = await serviceClient
     .from("request_document_checklist")
-    .select("id, request_id, title, customer_visible")
+    .select("id, request_id, title, customer_visible, status, linked_file_id")
     .eq("id", checklistItemId)
     .eq("request_id", requestId)
     .maybeSingle();
@@ -91,6 +99,11 @@ export async function POST(request: Request) {
 
   let fileId: string | null = null;
   let fileName: string | null = null;
+  const checklistBeforeUpload = checklistRow as ChecklistRow;
+  const replacedRejectedFile =
+    file instanceof File &&
+    checklistBeforeUpload.status === "incorrect" &&
+    Boolean(checklistBeforeUpload.linked_file_id);
 
   if (file instanceof File) {
     if (file.size > 20 * 1024 * 1024) {
@@ -173,19 +186,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not update the checklist item." }, { status: 500 });
   }
 
-  await serviceClient.from("request_activity_log").insert({
+  const { error: activityError } = await serviceClient.from("request_activity_log").insert({
     request_id: requestId,
     actor_id: null,
     actor_type: "customer",
-    action: fileId ? "customer_uploaded_file" : "customer_added_note",
+    action: fileId
+      ? replacedRejectedFile
+        ? "customer_replaced_file"
+        : "customer_uploaded_file"
+      : "customer_added_note",
     details: {
       customer_user_id: user.id,
       customer_email: user.email,
       checklist_item_id: checklistItemId,
       file_id: fileId,
+      file_name: fileName,
+      replaced_file_id: replacedRejectedFile ? checklistBeforeUpload.linked_file_id : null,
+      previous_status: checklistBeforeUpload.status,
       has_customer_note: Boolean(customerNote),
     },
   });
+
+  if (activityError) {
+    console.warn("Customer upload activity log failed after persistence", {
+      requestId,
+      checklistItemId,
+      reason: activityError.message,
+    });
+  }
 
   if (fileId) {
     sendCustomerUploadEmail({
@@ -207,9 +235,12 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     message: fileId
-      ? "Document uploaded successfully. Globalflowa will review it and update the status."
+      ? replacedRejectedFile
+        ? "Replacement uploaded successfully. Globalflowa will review the new file and update its status."
+        : "Document uploaded successfully. Globalflowa will review it and update the status."
       : "Note saved successfully.",
     fileId,
+    replacement: replacedRejectedFile,
   });
 }
 

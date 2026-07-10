@@ -505,7 +505,13 @@ function formatActivityAction(action: string) {
 }
 
 function describeActivity(details: Record<string, unknown>) {
-  const values = [details.checklist_item, details.file_name, details.subject, details.status]
+  const values = [
+    details.checklist_item,
+    details.file_name,
+    details.subject,
+    details.status,
+    typeof details.previous_status === "string" ? `Previously ${details.previous_status}` : null,
+  ]
     .filter((value): value is string => typeof value === "string" && value.length > 0);
   return values.join(" · ");
 }
