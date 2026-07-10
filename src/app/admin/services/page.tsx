@@ -63,9 +63,10 @@ export default async function AdminServicesPage() {
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <Link href="/admin/requests" className="text-sm font-semibold text-teal-700">
-          Back to requests
-        </Link>
+        <div className="flex flex-wrap gap-4 text-sm font-semibold text-teal-700">
+          <Link href="/admin/overview">Overview</Link>
+          <Link href="/admin/requests">Requests</Link>
+        </div>
         <div className="mt-5">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
             Admin

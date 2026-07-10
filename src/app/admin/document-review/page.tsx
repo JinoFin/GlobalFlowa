@@ -168,9 +168,10 @@ function DocumentReviewPageShell({
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <Link href="/admin/requests" className="text-sm font-semibold text-teal-700">
-              Back to requests
-            </Link>
+            <div className="flex flex-wrap gap-4 text-sm font-semibold text-teal-700">
+              <Link href="/admin/overview">Overview</Link>
+              <Link href="/admin/requests">Requests</Link>
+            </div>
             <p className="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
               Admin dashboard
             </p>

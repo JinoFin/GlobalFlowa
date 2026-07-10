@@ -81,6 +81,9 @@ export default async function AdminRequestsPage({ searchParams }: AdminRequestsP
             </h1>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link href="/admin/overview" className="rounded-md border border-navy-200 bg-white px-4 py-2 text-sm font-semibold text-navy-950">
+              Overview
+            </Link>
             <Link href="/admin/document-review" className="rounded-md bg-navy-950 px-4 py-2 text-sm font-semibold text-white">
               Document Review
             </Link>
