@@ -38,25 +38,26 @@ export async function sendRequestEmails({
   }
 
   const internalEmail = process.env.INTERNAL_NOTIFICATION_EMAIL ?? "info@globalflowa.com";
-  const fromEmail = process.env.EMAIL_FROM ?? "Globalflowa Portal <onboarding@resend.dev>";
   const mainService =
     getServiceBySlug(payload.selectedServices[0] ?? "")?.name ?? "Service Request";
   const companyName = payload.customer.company_name;
-  const subject = `New Globalflowa Request - ${mainService} - ${companyName}`;
+  const deliveries = await Promise.allSettled([
+    sendTextEmail(resend, {
+      to: internalEmail,
+      subject: `New service request: ${companyName} — ${mainService}`,
+      text: buildInternalEmail(payload, submissionId, uploadedFiles, checklistItems),
+    }),
+    sendTextEmail(resend, {
+      to: payload.customer.email,
+      subject: `We received your Globalflowa request — ${companyName}`,
+      text: buildCustomerEmail(payload, submissionId, checklistItems),
+    }),
+  ]);
 
-  await resend.emails.send({
-    from: fromEmail,
-    to: internalEmail,
-    subject,
-    text: buildInternalEmail(payload, submissionId, uploadedFiles, checklistItems),
-  });
-
-  await resend.emails.send({
-    from: fromEmail,
-    to: payload.customer.email,
-    subject: "Globalflowa received your request",
-    text: buildCustomerEmail(submissionId, checklistItems),
-  });
+  const failedDeliveries = deliveries.filter((delivery) => delivery.status === "rejected");
+  if (failedDeliveries.length > 0) {
+    throw new Error(`${failedDeliveries.length} request email delivery attempt(s) failed.`);
+  }
 }
 
 export async function sendCustomerUploadEmail({
@@ -81,24 +82,26 @@ export async function sendCustomerUploadEmail({
   }
 
   const internalEmail = process.env.INTERNAL_NOTIFICATION_EMAIL ?? "info@globalflowa.com";
-  const fromEmail = process.env.EMAIL_FROM ?? "Globalflowa Portal <onboarding@resend.dev>";
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
-  const adminUrl = siteUrl ? `${siteUrl}/admin/requests/${requestId}` : `/admin/requests/${requestId}`;
+  const adminUrl = buildSiteLink(`/admin/requests/${requestId}`);
 
-  await resend.emails.send({
-    from: fromEmail,
+  await sendTextEmail(resend, {
     to: internalEmail,
-    subject: `Customer uploaded document - ${companyName} - ${requestId}`,
+    subject: `Document uploaded: ${companyName} — ${checklistTitle}`,
     text: [
-      "Customer uploaded document",
+      "Customer document upload",
+      "========================",
       "",
+      `Company: ${companyName}`,
       `Customer email: ${customerEmail}`,
       `Request ID: ${requestId}`,
       `Checklist item: ${checklistTitle}`,
       `File name: ${fileName ?? "No file uploaded; note only"}`,
       `Customer note: ${customerNote || "No note provided."}`,
       "",
-      `Admin request detail: ${adminUrl}`,
+      "Review this upload in the admin portal:",
+      adminUrl,
+      "",
+      ...globalflowaSignature("Operations"),
     ].join("\n"),
   });
 }
@@ -128,33 +131,30 @@ export async function sendCustomerMessageEmail({
     throw new Error("NEXT_PUBLIC_SITE_URL is not configured.");
   }
 
-  const fromEmail = process.env.EMAIL_FROM ?? "Globalflowa Portal <onboarding@resend.dev>";
   const portalUrl = `${siteUrl}/portal/requests/${requestId}`;
   const messageStartsWithGreeting = /^(hello|hi|dear)\b/i.test(message.trim());
-  const { error } = await resend.emails.send({
-    from: fromEmail,
+  await sendTextEmail(resend, {
     to: customerEmail,
     subject,
     text: [
       ...(messageStartsWithGreeting ? [message] : ["Hello,", "", message]),
       "",
-      `Company / request: ${companyName}`,
+      "Request summary",
+      "---------------",
+      `Company: ${companyName}`,
       `Request ID: ${requestId}`,
       "",
       "Documents requiring your attention:",
-      ...checklistItems.map((item) => `- ${item.title} (${formatEmailStatus(item.status)})`),
+      ...(checklistItems.length
+        ? checklistItems.map((item) => `- ${item.title} (${formatEmailStatus(item.status)})`)
+        : ["- No checklist items were selected."]),
       "",
-      "Please open your request in the customer portal to upload missing or corrected files:",
+      "Open your request to upload missing or corrected files:",
       portalUrl,
       "",
-      "Kind regards,",
-      "Globalflowa",
+      ...globalflowaSignature("Customer Operations"),
     ].join("\n"),
   });
-
-  if (error) {
-    throw new Error(error.message || "Email provider rejected the customer message.");
-  }
 }
 
 function buildInternalEmail(
@@ -168,24 +168,37 @@ function buildInternalEmail(
     .join(", ");
 
   return [
+    "New Globalflowa service request",
+    "===============================",
+    "",
+    `Company: ${payload.customer.company_name}`,
+    `Primary service: ${getServiceBySlug(payload.selectedServices[0] ?? "")?.name ?? "Service Request"}`,
+    `Request ID: ${submissionId}`,
+    "",
     "Customer details",
+    "----------------",
     formatObject(payload.customer),
     "",
     "Selected services",
+    "-----------------",
     selectedServices,
     "",
     "Product information",
+    "-------------------",
     formatObject(payload.product),
     "",
     "Service-specific answers",
+    "------------------------",
     formatNestedObject(payload.serviceAnswers),
     "",
     "Uploaded documents",
+    "------------------",
     uploadedFiles.length
-      ? uploadedFiles.map((file) => `- ${file.field}: ${file.name} (${file.path})`).join("\n")
+      ? uploadedFiles.map((file) => `- ${file.field}: ${file.name}`).join("\n")
       : "No files uploaded.",
     "",
-    "Generated Document Checklist",
+    "Generated document checklist",
+    "----------------------------",
     formatInternalChecklist(checklistItems),
     "",
     "Urgency / deadline",
@@ -197,27 +210,39 @@ function buildInternalEmail(
     "",
     "Submission ID",
     submissionId,
+    "",
+    "Open this request in the admin portal:",
+    buildSiteLink(`/admin/requests/${submissionId}`),
+    "",
+    ...globalflowaSignature("Operations"),
   ].join("\n");
 }
 
-function buildCustomerEmail(submissionId: string, checklistItems: GeneratedChecklistItem[]) {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
-  const portalUrl = siteUrl ? `${siteUrl}/portal/login` : "/portal/login";
+function buildCustomerEmail(
+  payload: RequestPayload,
+  submissionId: string,
+  checklistItems: GeneratedChecklistItem[],
+) {
+  const portalUrl = buildSiteLink(`/portal/requests/${submissionId}`);
 
   return [
-    "Thank you. Your request has been submitted successfully.",
+    `Hello ${payload.customer.contact_person || "there"},`,
     "",
-    "Globalflowa will review your information and contact you shortly.",
+    "We received your Globalflowa service request.",
     "",
-    "When your customer login is configured, you can access the Globalflowa customer portal to track request status and upload missing or corrected documents.",
-    `Customer portal: ${portalUrl}`,
+    `Company: ${payload.customer.company_name}`,
+    `Request ID: ${submissionId}`,
     "",
-    "Based on your request, the following documents may be required:",
+    "Our team will review the submitted information and contact you if anything is missing or needs correction.",
+    "",
+    "Documents that may be required",
+    "------------------------------",
     formatCustomerChecklist(checklistItems),
     "",
-    "Our team will review your uploaded documents and contact you if anything is missing or needs correction.",
+    "Track the request and upload documents securely in your customer portal:",
+    portalUrl,
     "",
-    `Submission ID: ${submissionId}`,
+    ...globalflowaSignature("Customer Operations"),
   ].join("\n");
 }
 
@@ -269,6 +294,29 @@ function formatChecklistItems(items: GeneratedChecklistItem[]) {
 
 function formatEmailStatus(status: string) {
   return status.replaceAll("_", " ");
+}
+
+async function sendTextEmail(
+  resend: Resend,
+  email: { to: string; subject: string; text: string },
+) {
+  const { error } = await resend.emails.send({
+    from: process.env.EMAIL_FROM ?? "Globalflowa Portal <onboarding@resend.dev>",
+    ...email,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Email provider rejected the message.");
+  }
+}
+
+function buildSiteLink(path: string) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
+  return siteUrl ? `${siteUrl}${path}` : path;
+}
+
+function globalflowaSignature(team: string) {
+  return ["Kind regards,", `Globalflowa ${team}`, "globalflowa.com"];
 }
 
 function formatObject(value: Record<string, unknown>) {

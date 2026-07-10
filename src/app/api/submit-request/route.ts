@@ -283,7 +283,10 @@ export async function POST(request: NextRequest) {
   try {
     await sendRequestEmails({ payload, submissionId, uploadedFiles, checklistItems });
   } catch (error) {
-    console.error("Request email failed", error);
+    console.error("Request email failed after persistence", {
+      requestId: submissionId,
+      reason: error instanceof Error ? error.message : "unknown error",
+    });
   }
 
   return NextResponse.json({ ok: true, submissionId });
