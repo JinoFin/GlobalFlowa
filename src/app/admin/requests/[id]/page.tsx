@@ -10,6 +10,10 @@ import {
   type CustomerMessageChecklistItem,
 } from "@/components/admin/customer-message-section";
 import { RequestActions } from "@/components/admin/request-actions";
+import {
+  RequestOwnershipSection,
+  type StaffProfileOption,
+} from "@/components/admin/request-ownership-section";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
 
@@ -23,6 +27,11 @@ type RequestRow = {
   id: string;
   created_at: string;
   status: string;
+  priority: string;
+  assigned_to: string | null;
+  due_at: string | null;
+  assigned_at: string | null;
+  assigned_by: string | null;
   company_name: string;
   contact_person: string;
   email: string;
@@ -85,6 +94,13 @@ type CustomerMessageRow = {
   sent_at: string | null;
 };
 
+type StaffProfileRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string;
+};
+
 export default async function RequestDetailPage({ params }: RequestDetailPageProps) {
   const { id } = await params;
   let supabase;
@@ -106,7 +122,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
     redirect("/portal/requests");
   }
 
-  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }, { data: customerMessages }] =
+  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }, { data: customerMessages }, { data: staffProfiles }] =
     await Promise.all([
       supabase.from("service_requests").select("*").eq("id", id).single(),
       supabase.from("request_services").select("service_name, service_slug").eq("request_id", id),
@@ -120,6 +136,11 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
         .select("id, subject, message, email_status, customer_visible, created_at, sent_at")
         .eq("request_id", id)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("id, full_name, email, role")
+        .in("role", ["admin", "team"])
+        .order("full_name"),
     ]);
 
   if (!request) {
@@ -127,6 +148,14 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   }
 
   const requestRow = request as RequestRow;
+  const staffRows = (staffProfiles ?? []) as StaffProfileRow[];
+  const staffOptions = staffRows.map((profile) => ({
+    id: profile.id,
+    fullName: profile.full_name,
+    email: profile.email,
+    role: profile.role,
+  })) satisfies StaffProfileOption[];
+  const assignedByName = staffOptions.find((profile) => profile.id === requestRow.assigned_by);
   const checklistRows = (checklist ?? []) as AdminChecklistItem[];
   const nextAction = getAdminNextAction(requestRow.status, checklistRows);
   const customerActionItems = checklistRows
@@ -186,6 +215,16 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
                 </Link>
               </div>
             </section>
+
+            <RequestOwnershipSection
+              requestId={requestRow.id}
+              initialAssignedTo={requestRow.assigned_to}
+              initialPriority={requestRow.priority}
+              initialDueAt={requestRow.due_at}
+              assignedAt={requestRow.assigned_at}
+              assignedByName={assignedByName?.fullName || assignedByName?.email || null}
+              staff={staffOptions}
+            />
 
             <InfoGrid
               title="Customer details"

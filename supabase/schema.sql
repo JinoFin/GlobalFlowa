@@ -46,7 +46,7 @@ create table if not exists public.service_requests (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   status text not null default 'New' check (status in ('New', 'In Review', 'Missing Documents', 'Waiting for Customer', 'Submitted to Authority', 'In Progress', 'Completed', 'Cancelled')),
-  priority text,
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
   company_name text not null,
   contact_person text not null,
   email text not null,
@@ -60,7 +60,10 @@ create table if not exists public.service_requests (
   deadline date,
   message text,
   source text default 'website',
-  assigned_to uuid references public.profiles(id),
+  assigned_to uuid references public.profiles(id) on delete set null,
+  due_at timestamptz,
+  assigned_at timestamptz,
+  assigned_by uuid references public.profiles(id) on delete set null,
   internal_notes text,
   customer_user_id uuid references auth.users(id),
   customer_email text,
@@ -198,7 +201,37 @@ alter table public.profiles alter column role set default 'customer';
 alter table public.service_requests add column if not exists customer_user_id uuid references auth.users(id);
 alter table public.service_requests add column if not exists customer_email text;
 alter table public.service_requests add column if not exists customer_access_enabled boolean not null default true;
+alter table public.service_requests add column if not exists due_at timestamptz;
+alter table public.service_requests add column if not exists assigned_at timestamptz;
+alter table public.service_requests add column if not exists assigned_by uuid;
 update public.service_requests set customer_email = email where customer_email is null;
+update public.service_requests
+set priority = case lower(trim(coalesce(priority, '')))
+  when 'low' then 'low'
+  when 'high' then 'high'
+  when 'urgent' then 'urgent'
+  else 'normal'
+end;
+alter table public.service_requests alter column priority set default 'normal';
+alter table public.service_requests alter column priority set not null;
+alter table public.service_requests drop constraint if exists service_requests_priority_check;
+alter table public.service_requests add constraint service_requests_priority_check check (priority in ('low', 'normal', 'high', 'urgent'));
+alter table public.service_requests drop constraint if exists service_requests_assigned_to_fkey;
+alter table public.service_requests add constraint service_requests_assigned_to_fkey foreign key (assigned_to) references public.profiles(id) on delete set null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'service_requests_assigned_by_fkey'
+    and conrelid = 'public.service_requests'::regclass
+  ) then
+    alter table public.service_requests
+      add constraint service_requests_assigned_by_fkey
+      foreign key (assigned_by) references public.profiles(id)
+      on delete set null;
+  end if;
+end $$;
 
 alter table public.request_files add column if not exists uploaded_by_user_id uuid references auth.users(id);
 alter table public.request_files add column if not exists uploaded_by_role text not null default 'customer';
@@ -234,6 +267,9 @@ create index if not exists idx_service_requests_urgency on public.service_reques
 create index if not exists idx_service_requests_country on public.service_requests(country);
 create index if not exists idx_service_requests_customer_user_id on public.service_requests(customer_user_id);
 create index if not exists idx_service_requests_customer_email on public.service_requests ((lower(coalesce(customer_email, email))));
+create index if not exists idx_service_requests_assigned_to on public.service_requests(assigned_to);
+create index if not exists idx_service_requests_priority on public.service_requests(priority);
+create index if not exists idx_service_requests_due_at on public.service_requests(due_at);
 create index if not exists idx_request_services_request_id on public.request_services(request_id);
 create index if not exists idx_request_answers_request_id on public.request_answers(request_id);
 create index if not exists idx_request_files_request_id on public.request_files(request_id);
@@ -330,6 +366,7 @@ drop policy if exists "Admins can update customer messages" on public.customer_m
 drop policy if exists "Customers can read own visible messages" on public.customer_messages;
 drop policy if exists "Admins can manage activity" on public.request_activity_log;
 drop policy if exists "Admins can read request documents" on storage.objects;
+drop policy if exists "Admin and team can read staff profiles" on public.profiles;
 
 create policy "Public can read active services"
 on public.services for select
@@ -360,6 +397,11 @@ on public.profiles for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+create policy "Admin and team can read staff profiles"
+on public.profiles for select
+to authenticated
+using (public.is_admin_or_team() and role in ('admin', 'team'));
 
 create policy "Admins can manage service catalog"
 on public.services for all
@@ -564,6 +606,7 @@ on public.request_activity_log for all
 to authenticated
 using (public.is_admin_or_team())
 with check (public.is_admin_or_team());
+
 
 insert into storage.buckets (id, name, public)
 values ('request-documents', 'request-documents', false)
