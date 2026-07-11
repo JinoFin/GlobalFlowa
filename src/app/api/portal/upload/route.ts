@@ -145,6 +145,7 @@ export async function POST(request: Request) {
         storage_path: storagePath,
         uploaded_by_user_id: user.id,
         uploaded_by_role: "customer",
+        file_category: "customer_upload",
         linked_checklist_item_id: checklistItemId,
         customer_note: customerNote || null,
       })

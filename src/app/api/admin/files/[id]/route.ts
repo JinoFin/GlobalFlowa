@@ -22,8 +22,9 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
   try {
     supabase = await createSupabaseServerClient();
   } catch (error) {
+    console.error("Admin file auth setup failed", { reason: error instanceof Error ? error.message : "unknown error" });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Supabase auth is not configured." },
+      { error: "Secure staff file access is temporarily unavailable." },
       { status: 503 },
     );
   }
@@ -57,8 +58,9 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
   try {
     serviceClient = getSupabaseServiceClient();
   } catch (error) {
+    console.error("Admin file storage setup failed", { fileId: id, reason: error instanceof Error ? error.message : "unknown error" });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Supabase storage is not configured." },
+      { error: "Secure staff file access is temporarily unavailable." },
       { status: 503 },
     );
   }

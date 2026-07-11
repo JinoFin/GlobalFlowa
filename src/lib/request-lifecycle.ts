@@ -21,14 +21,15 @@ export function lifecycleProgress(stage: LifecycleStage) {
   return Math.round(((lifecycleStages.indexOf(stage) + 1) / lifecycleStages.length) * 100);
 }
 
-export function getCustomerNextAction({ stage, checklist, hasActionMessage = false }: { stage: LifecycleStage; checklist: Array<{ status: string; required: boolean }>; hasActionMessage?: boolean }) {
+export function getCustomerNextAction({ stage, checklist, hasActionMessage = false, hasPublishedDeliverables = false }: { stage: LifecycleStage; checklist: Array<{ status: string; required: boolean }>; hasActionMessage?: boolean; hasPublishedDeliverables?: boolean }) {
   if (stage === "archived") return { label: "No further action available", tone: "archived" };
-  if (stage === "completed") return { label: "View final documents", tone: "completed" };
   if (checklist.some((item) => item.required && ["incorrect", "expired"].includes(item.status))) return { label: "Upload a corrected document", tone: "action" };
   if (checklist.some((item) => item.required && ["required", "missing"].includes(item.status))) return { label: "Upload the required document", tone: "action" };
   if (hasActionMessage) return { label: "Review the latest message", tone: "action" };
   if (checklist.some((item) => ["uploaded", "under_review"].includes(item.status))) return { label: "No action required — document under review", tone: "review" };
+  if (stage === "completed") return { label: hasPublishedDeliverables ? "Download your final documents" : "Final documents will be available soon", tone: "completed" };
   if (stage === "waiting_for_documents") return { label: "Provide the requested information", tone: "action" };
-  if (["processing", "external_processing", "final_review"].includes(stage)) return { label: "No action required", tone: "processing" };
+  if (stage === "final_review") return { label: "No action required — final review in progress", tone: "processing" };
+  if (["processing", "external_processing"].includes(stage)) return { label: "No action required", tone: "processing" };
   return { label: lifecycleInfo[stage].next, tone: "review" };
 }

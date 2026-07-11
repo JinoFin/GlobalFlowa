@@ -1,4 +1,5 @@
--- Phase 6A-6B: customer lifecycle, verified access, and personal/company profiles.
+-- Phase 6A-6E: customer lifecycle, verified access, profiles, request linking,
+-- lifecycle progress, and secure final customer deliverables.
 -- This migration is additive/idempotent and does not change existing admin or team roles.
 
 create table if not exists public.customer_account_activity (
@@ -21,6 +22,31 @@ alter table public.profiles add column if not exists timezone text;
 alter table public.service_requests add column if not exists lifecycle_stage text not null default 'received';
 alter table public.service_requests add column if not exists lifecycle_stage_updated_at timestamptz;
 alter table public.service_requests add column if not exists lifecycle_stage_updated_by uuid references public.profiles(id) on delete set null;
+
+alter table public.request_files add column if not exists title text;
+alter table public.request_files add column if not exists description text;
+alter table public.request_files add column if not exists file_category text;
+alter table public.request_files add column if not exists customer_visible boolean not null default false;
+alter table public.request_files add column if not exists is_final_deliverable boolean not null default false;
+alter table public.request_files add column if not exists published_at timestamptz;
+alter table public.request_files add column if not exists published_by uuid references public.profiles(id) on delete set null;
+alter table public.request_files add column if not exists deleted_at timestamptz;
+alter table public.request_files add column if not exists deleted_by uuid references public.profiles(id) on delete set null;
+update public.request_files
+set file_category = case when uploaded_by_role = 'customer' then 'customer_upload' else 'internal_document' end
+where file_category is null;
+alter table public.request_files alter column file_category set default 'internal_document';
+alter table public.request_files alter column file_category set not null;
+alter table public.request_files drop constraint if exists request_files_file_category_check;
+alter table public.request_files add constraint request_files_file_category_check check (file_category in ('customer_upload','internal_document','final_deliverable','authority_document','certificate','report','agreement','invoice','correspondence','other'));
+alter table public.request_files drop constraint if exists request_files_publication_state_check;
+alter table public.request_files add constraint request_files_publication_state_check check (
+  (customer_visible = false and published_at is null and published_by is null)
+  or (customer_visible = true and is_final_deliverable = true and published_at is not null and published_by is not null and deleted_at is null)
+);
+create index if not exists idx_request_files_published_deliverables
+on public.request_files(request_id, published_at desc)
+where is_final_deliverable = true and customer_visible = true and published_at is not null and deleted_at is null;
 update public.service_requests set lifecycle_stage = case status
   when 'New' then 'received' when 'In Review' then 'initial_review'
   when 'Missing Documents' then 'waiting_for_documents' when 'Waiting for Customer' then 'waiting_for_documents'
@@ -321,7 +347,20 @@ using (public.is_verified_customer() and exists (select 1 from public.service_re
 
 drop policy if exists "Customers can read own request files" on public.request_files;
 create policy "Customers can read own request files" on public.request_files for select to authenticated
-using (public.is_verified_customer() and exists (select 1 from public.service_requests sr where sr.id = request_files.request_id and sr.customer_access_enabled = true and sr.customer_user_id = (select auth.uid())));
+using (
+  public.is_verified_customer()
+  and deleted_at is null
+  and (
+    (uploaded_by_role = 'customer' and is_final_deliverable = false)
+    or (is_final_deliverable = true and customer_visible = true and published_at is not null)
+  )
+  and exists (
+    select 1 from public.service_requests sr
+    where sr.id = request_files.request_id
+      and sr.customer_access_enabled = true
+      and sr.customer_user_id = (select auth.uid())
+  )
+);
 
 drop policy if exists "Customers can read own visible checklist" on public.request_document_checklist;
 create policy "Customers can read own visible checklist" on public.request_document_checklist for select to authenticated

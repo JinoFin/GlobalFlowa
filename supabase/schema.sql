@@ -108,6 +108,16 @@ create table if not exists public.request_files (
   uploaded_by_role text not null default 'customer' check (uploaded_by_role in ('customer', 'admin', 'system')),
   linked_checklist_item_id uuid,
   customer_note text,
+  title text,
+  description text,
+  file_category text not null default 'internal_document' check (file_category in ('customer_upload','internal_document','final_deliverable','authority_document','certificate','report','agreement','invoice','correspondence','other')),
+  customer_visible boolean not null default false,
+  is_final_deliverable boolean not null default false,
+  published_at timestamptz,
+  published_by uuid references public.profiles(id) on delete set null,
+  deleted_at timestamptz,
+  deleted_by uuid references public.profiles(id) on delete set null,
+  constraint request_files_publication_state_check check ((customer_visible = false and published_at is null and published_by is null) or (customer_visible = true and is_final_deliverable = true and published_at is not null and published_by is not null and deleted_at is null)),
   created_at timestamptz not null default now()
 );
 
@@ -300,8 +310,24 @@ alter table public.request_files add column if not exists linked_checklist_item_
 alter table public.request_files add column if not exists customer_note text;
 alter table public.request_files add column if not exists file_size bigint;
 alter table public.request_files add column if not exists file_type text;
+alter table public.request_files add column if not exists title text;
+alter table public.request_files add column if not exists description text;
+alter table public.request_files add column if not exists file_category text;
+alter table public.request_files add column if not exists customer_visible boolean not null default false;
+alter table public.request_files add column if not exists is_final_deliverable boolean not null default false;
+alter table public.request_files add column if not exists published_at timestamptz;
+alter table public.request_files add column if not exists published_by uuid references public.profiles(id) on delete set null;
+alter table public.request_files add column if not exists deleted_at timestamptz;
+alter table public.request_files add column if not exists deleted_by uuid references public.profiles(id) on delete set null;
+update public.request_files set file_category = case when uploaded_by_role = 'customer' then 'customer_upload' else 'internal_document' end where file_category is null;
+alter table public.request_files alter column file_category set default 'internal_document';
+alter table public.request_files alter column file_category set not null;
 alter table public.request_files drop constraint if exists request_files_uploaded_by_role_check;
 alter table public.request_files add constraint request_files_uploaded_by_role_check check (uploaded_by_role in ('customer', 'admin', 'system'));
+alter table public.request_files drop constraint if exists request_files_file_category_check;
+alter table public.request_files add constraint request_files_file_category_check check (file_category in ('customer_upload','internal_document','final_deliverable','authority_document','certificate','report','agreement','invoice','correspondence','other'));
+alter table public.request_files drop constraint if exists request_files_publication_state_check;
+alter table public.request_files add constraint request_files_publication_state_check check ((customer_visible = false and published_at is null and published_by is null) or (customer_visible = true and is_final_deliverable = true and published_at is not null and published_by is not null and deleted_at is null));
 
 alter table public.request_document_checklist add column if not exists customer_visible boolean not null default true;
 alter table public.request_document_checklist add column if not exists admin_note_customer_visible boolean not null default false;
@@ -337,6 +363,7 @@ create index if not exists idx_request_services_request_id on public.request_ser
 create index if not exists idx_request_answers_request_id on public.request_answers(request_id);
 create index if not exists idx_request_files_request_id on public.request_files(request_id);
 create index if not exists idx_request_files_linked_checklist_item_id on public.request_files(linked_checklist_item_id);
+create index if not exists idx_request_files_published_deliverables on public.request_files(request_id, published_at desc) where is_final_deliverable = true and customer_visible = true and published_at is not null and deleted_at is null;
 create index if not exists idx_document_templates_service_slug on public.document_templates(service_slug);
 create index if not exists idx_request_document_checklist_request_id on public.request_document_checklist(request_id);
 create index if not exists idx_request_document_checklist_status on public.request_document_checklist(status);
@@ -560,6 +587,8 @@ on public.service_requests for select
 to authenticated
 using (
   public.is_verified_customer()
+  and request_files.deleted_at is null
+  and ((request_files.uploaded_by_role = 'customer' and request_files.is_final_deliverable = false) or (request_files.is_final_deliverable = true and request_files.customer_visible = true and request_files.published_at is not null))
   and
   customer_access_enabled = true
   and customer_user_id = (select auth.uid())

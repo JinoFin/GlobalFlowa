@@ -163,6 +163,33 @@ Shared-mailbox limitation: exact verified-email matching means one Supabase Auth
 9. Confirm automatic transitions never overwrite `completed` or `archived`.
 10. Re-test messaging, uploads, document review, profiles, signup, password recovery, and secure request linking.
 
+## Phase 6 Secure Final Deliverables Acceptance
+
+The `request-documents` bucket must remain private. Final deliverables reuse `request_files`; upload is draft-first, publication is explicit, and customer download authorization checks the verified user, request ownership, final-deliverable flag, publication state, and soft-deletion state before creating a 60-second signed URL. Signed URLs must never be stored or logged. Publishing does not change lifecycle stage; archived requests retain already-published files unless a later archive policy explicitly changes that behavior.
+
+1. Admin uploads a final document as draft.
+2. Customer cannot see the draft.
+3. Customer cannot download the draft by guessing its ID.
+4. Admin securely downloads the draft.
+5. Admin publishes the document.
+6. Customer sees it on the correct request.
+7. Customer securely downloads it.
+8. Customer A cannot download Customer B's document.
+9. Direct bucket URL is unavailable.
+10. Signed URL expires.
+11. Admin unpublishes the document.
+12. Customer no longer sees or downloads it.
+13. Repeated publish does not create duplicate activity.
+14. Admin republishes the document.
+15. Admin deletes the exact deliverable with confirmation.
+16. Deleted file is no longer downloadable.
+17. Customer uploads remain unaffected.
+18. Internal documents remain invisible.
+19. Document review queue remains functional.
+20. Completed request shows final-document guidance.
+21. Archived requests retain published final documents as documented.
+22. Existing signup, profiles, claiming, lifecycle, messaging, assignments, and tasks still work.
+
 ## Data Workflow
 
 - Confirm `service_requests` contains the submitted request.

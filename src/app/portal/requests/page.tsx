@@ -57,15 +57,16 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
   const requestRows = (requests ?? []) as RequestRow[];
   const linkedCount = Number.parseInt((await searchParams).linked ?? "", 10);
   const requestIds = requestRows.map((request) => request.id);
-  const { data: checklistRows } = requestIds.length
-    ? await supabase
-        .from("request_document_checklist")
-        .select("request_id, status, required")
-        .in("request_id", requestIds)
-    : { data: [] };
+  const [{ data: checklistRows }, { data: deliverableRows }] = requestIds.length
+    ? await Promise.all([
+        supabase.from("request_document_checklist").select("request_id, status, required").in("request_id", requestIds),
+        supabase.from("request_files").select("request_id").in("request_id", requestIds).eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
+      ])
+    : [{ data: [] }, { data: [] }];
   const summaries = summarizeChecklist((checklistRows ?? []) as ChecklistRow[]);
   const checklistByRequest = new Map<string, ChecklistRow[]>();
   for (const item of (checklistRows ?? []) as ChecklistRow[]) checklistByRequest.set(item.request_id, [...(checklistByRequest.get(item.request_id) ?? []), item]);
+  const requestsWithDeliverables = new Set((deliverableRows ?? []).map((row) => row.request_id as string));
 
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
@@ -101,7 +102,8 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
             {requestRows.map((request) => {
               const summary = summaries.get(request.id) ?? { total: 0, accepted: 0, action: 0, percent: 0 };
               const stage = normalizeLifecycleStage(request.lifecycle_stage);
-              const nextAction = getCustomerNextAction({ stage, checklist: checklistByRequest.get(request.id) ?? [] });
+              const hasPublishedDeliverables = requestsWithDeliverables.has(request.id);
+              const nextAction = getCustomerNextAction({ stage, checklist: checklistByRequest.get(request.id) ?? [], hasPublishedDeliverables });
               return (
                 <Link
                   key={request.id}
@@ -119,6 +121,7 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
                   <p className="mt-1 text-xs text-navy-500">{formatDate(request.created_at)}</p>
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-navy-100"><div className="h-full rounded-full bg-teal-600" style={{ width: `${lifecycleProgress(stage)}%` }} /></div>
                   <p className="mt-2 text-sm font-semibold text-navy-700">{nextAction.label}</p>
+                  {hasPublishedDeliverables ? <p className="mt-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">Final documents available</p> : null}
                   {request.lifecycle_stage_updated_at ? <p className="mt-1 text-xs text-navy-500">Progress updated {formatDate(request.lifecycle_stage_updated_at)}</p> : null}
                   <div className="mt-5">
                     <div className="h-2 overflow-hidden rounded-full bg-navy-100">

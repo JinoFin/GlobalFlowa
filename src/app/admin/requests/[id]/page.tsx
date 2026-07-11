@@ -12,6 +12,7 @@ import {
 import { RequestActions } from "@/components/admin/request-actions";
 import { CustomerPortalAccess } from "@/components/admin/customer-portal-access";
 import { CustomerLifecycleProgress } from "@/components/admin/customer-lifecycle-progress";
+import { FinalDeliverablesSection, type AdminFinalDeliverable } from "@/components/admin/final-deliverables-section";
 import {
   InternalTasksSection,
   type InternalTaskItem,
@@ -74,6 +75,15 @@ type FileRow = {
   uploaded_by_role: string | null;
   linked_checklist_item_id: string | null;
   customer_note: string | null;
+  title: string | null;
+  description: string | null;
+  file_category: string;
+  file_size: number | null;
+  customer_visible: boolean;
+  is_final_deliverable: boolean;
+  published_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
 };
 
 type NoteRow = {
@@ -186,6 +196,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   })) satisfies StaffProfileOption[];
   const assignedByName = staffOptions.find((profile) => profile.id === requestRow.assigned_by);
   const checklistRows = (checklist ?? []) as AdminChecklistItem[];
+  const fileRows = (files ?? []) as FileRow[];
   const nextAction = getAdminNextAction(requestRow.status, checklistRows);
   const customerActionItems = checklistRows
     .filter(
@@ -246,6 +257,12 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
             </section>
 
             <CustomerLifecycleProgress requestId={requestRow.id} initialStage={requestRow.lifecycle_stage} updatedAt={requestRow.lifecycle_stage_updated_at} />
+
+            <FinalDeliverablesSection
+              requestId={requestRow.id}
+              lifecycleStage={requestRow.lifecycle_stage}
+              initialFiles={fileRows.filter((file) => file.is_final_deliverable) as AdminFinalDeliverable[]}
+            />
 
             <RequestOwnershipSection
               requestId={requestRow.id}
@@ -309,12 +326,12 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
               title="Document status"
               description="Customer uploads and the review state of every checklist requirement."
             />
-            <FilesSection files={(files ?? []) as FileRow[]} />
+            <FilesSection files={fileRows.filter((file) => !file.is_final_deliverable && !file.deleted_at)} />
             <div id="document-checklist" className="scroll-mt-6">
               <DocumentChecklistSection
                 requestId={requestRow.id}
                 initialItems={checklistRows}
-                files={(files ?? []) as AdminFileOption[]}
+                files={fileRows.filter((file) => !file.deleted_at) as AdminFileOption[]}
               />
             </div>
 
@@ -602,6 +619,8 @@ function describeActivity(details: Record<string, unknown>) {
     details.file_name,
     details.subject,
     details.status,
+    details.title,
+    details.category,
     typeof details.previous_stage === "string" ? `From ${details.previous_stage.replaceAll("_", " ")}` : null,
     typeof details.new_stage === "string" ? `To ${details.new_stage.replaceAll("_", " ")}` : null,
     typeof details.previous_status === "string" ? `Previously ${details.previous_status}` : null,

@@ -231,6 +231,7 @@ export async function POST(request: NextRequest) {
         storage_bucket: "request-documents",
         storage_path: file.path,
         uploaded_by_role: "customer",
+        file_category: "customer_upload",
       })),
     ).select("id, field_key, file_name, storage_path");
     if (error) {

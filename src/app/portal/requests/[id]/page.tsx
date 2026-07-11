@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "../portal-ui";
 import { LifecycleProgress } from "@/components/portal/lifecycle-progress";
 import { getCustomerNextAction, normalizeLifecycleStage } from "@/lib/request-lifecycle";
+import { finalDeliverableCategoryLabels, finalDeliverableCategories, type FinalDeliverableCategory } from "@/lib/final-deliverables";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,16 @@ type CustomerMessageRow = {
   checklist_item_ids: string[];
 };
 
+type FinalDeliverableRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  file_category: string;
+  file_name: string;
+  file_size: number | null;
+  published_at: string;
+};
+
 export default async function PortalRequestDetailPage({ params }: RequestDetailPageProps) {
   const { id } = await params;
   let supabase;
@@ -101,7 +112,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
     redirect("/portal/login");
   }
 
-  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: customerMessages }] =
+  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: customerMessages }, { data: deliverables }] =
     await Promise.all([
       supabase
         .from("service_requests")
@@ -130,6 +141,15 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
         .eq("request_id", id)
         .eq("customer_visible", true)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("request_files")
+        .select("id, title, description, file_category, file_name, file_size, published_at")
+        .eq("request_id", id)
+        .eq("is_final_deliverable", true)
+        .eq("customer_visible", true)
+        .not("published_at", "is", null)
+        .is("deleted_at", null)
+        .order("published_at", { ascending: false }),
     ]);
 
   if (!request) {
@@ -144,7 +164,8 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
   const actionItems = checklistRows.filter((item) => needsCustomerAction(item));
   const summary = summarizeChecklist(checklistRows);
   const lifecycleStage = normalizeLifecycleStage(requestRow.lifecycle_stage);
-  const nextAction = getCustomerNextAction({ stage: lifecycleStage, checklist: checklistRows, hasActionMessage: customerMessageRows.some((message) => message.checklist_item_ids.length > 0) });
+  const deliverableRows = (deliverables ?? []) as FinalDeliverableRow[];
+  const nextAction = getCustomerNextAction({ stage: lifecycleStage, checklist: checklistRows, hasActionMessage: customerMessageRows.some((message) => message.checklist_item_ids.length > 0), hasPublishedDeliverables: deliverableRows.length > 0 });
 
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
@@ -168,6 +189,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="space-y-6">
             <LifecycleProgress stage={lifecycleStage} updatedAt={requestRow.lifecycle_stage_updated_at} nextAction={nextAction.label} />
+            <FinalDocuments files={deliverableRows} completed={lifecycleStage === "completed"} />
             <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
@@ -289,6 +311,24 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
       </div>
     </div>
   );
+}
+
+function FinalDocuments({ files, completed }: { files: FinalDeliverableRow[]; completed: boolean }) {
+  return (
+    <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">
+      <h2 className="text-xl font-semibold text-navy-950">Final Documents</h2>
+      <p className="mt-2 text-sm text-navy-650">Published completion documents are available through a short-lived secure download link.</p>
+      {files.length ? <div className="mt-5 space-y-3">{files.map((file) => {
+        const category = finalDeliverableCategories.includes(file.file_category as FinalDeliverableCategory) ? file.file_category as FinalDeliverableCategory : "other";
+        return <article key={file.id} className="rounded-md border border-navy-100 bg-navy-50 p-4"><h3 className="font-semibold text-navy-950">{file.title || file.file_name}</h3>{file.description ? <p className="mt-2 text-sm text-navy-650">{file.description}</p> : null}<p className="mt-2 text-xs text-navy-500">{finalDeliverableCategoryLabels[category]} · {file.file_name} · {formatFileSize(file.file_size)} · Published {formatDate(file.published_at)}</p><a href={`/api/portal/files/${file.id}/download`} className="mt-3 inline-flex rounded-md bg-teal-700 px-3 py-2 text-sm font-semibold text-white">Secure download</a></article>;
+      })}</div> : <p className="mt-5 rounded-md border border-dashed border-navy-200 bg-navy-50 p-4 text-sm text-navy-650">{completed ? "Your request is completed. Final documents will appear here when they are published." : "Final documents have not been published yet."}</p>}
+    </section>
+  );
+}
+
+function formatFileSize(value: number | null) {
+  if (!value) return "Size unavailable";
+  return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function ChecklistItemCard({

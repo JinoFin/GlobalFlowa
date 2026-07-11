@@ -4,6 +4,10 @@ Professional B2B website and service request portal for Globalflowa, a Germany m
 
 Customer lifecycle tracking is separate from internal request status. Allowed customer stages are `received`, `initial_review`, `waiting_for_documents`, `document_review`, `processing`, `external_processing`, `final_review`, `completed`, and `archived`. Admin/team users control the stage through a protected API; portal queries expose only the stage and update time. Missing-document messages and requested-document uploads apply the only automatic transitions, and never overwrite completed or archived stages. Customer next actions prioritize corrections, missing documents, action messages, and uploads under review before the general lifecycle stage.
 
+Phase 6E extends the existing `request_files` model and private `request-documents` bucket for final customer deliverables. Staff uploads are drafts by default; publication is explicit and reversible. A customer sees metadata only for published final deliverables on a request owned by their verified account, and downloads are authorized server-side before a 60-second signed URL is created. Signed URLs are never stored, the bucket remains private, unpublishing does not delete the object, and deletion targets the exact object while retaining soft-deleted metadata for audit. Supported uploads are PDF, PNG, JPEG, DOC, DOCX, XLS, XLSX, CSV, and TXT up to 20 MB, with both extension and MIME checks.
+
+Publishing a deliverable does not complete a request or change its lifecycle stage. Completed requests guide customers to download published files, or explain that final documents will be available soon. Archived requests retain access to already published deliverables. Draft, unpublished, deleted, customer-upload, and internal-document records are excluded from the final-documents view.
+
 ## Phase 1 scope
 
 - Homepage and premium B2B public website
@@ -609,6 +613,7 @@ These fields and tasks are internal. Customer portal queries continue to use exp
 - Phase 3C document review queue: no migration required.
 - Phase 4A–4E MVP completion sprint: no migration required; existing Phase 3 tables, columns, and RLS policies are reused.
 - Phase 5 operations management: `supabase/migrations/202607110001_phase5_operations_management.sql` — created locally and must be applied manually before the Phase 5 commits are pushed/deployed.
+- Phase 6 customer lifecycle: `supabase/migrations/202607110002_phase6_customer_lifecycle.sql` — one consolidated pending migration through Phase 6E; apply manually only after review and before deploying dependent Phase 6 code.
 
 Never run `supabase/schema.sql` against the existing live database. If a future change needs database work, create and review a live-safe migration, apply it manually before deploying dependent code, and record the result in the live QA checklist.
 
