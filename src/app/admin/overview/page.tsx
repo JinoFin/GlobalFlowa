@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/admin/logout-button";
+import {
+  OperationalAlerts,
+  type OperationalRequest,
+  type OperationalTask,
+} from "@/components/admin/operational-alerts";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
 
@@ -38,6 +43,28 @@ type RequestNameRow = {
   company_name: string;
 };
 
+type OperationsRequestRow = {
+  id: string;
+  company_name: string;
+  status: string;
+  priority: string;
+  assigned_to: string | null;
+  due_at: string | null;
+  updated_at: string;
+};
+
+type OperationsTaskRow = {
+  id: string;
+  request_id: string;
+  title: string;
+  status: string;
+  priority: string;
+  assigned_to: string | null;
+  due_at: string | null;
+};
+
+type OperationsChecklistRow = { request_id: string; status: string };
+
 export default async function AdminOverviewPage() {
   let supabase;
 
@@ -68,6 +95,9 @@ export default async function AdminOverviewPage() {
     messageResult,
     uploadResult,
     activityResult,
+    operationsRequestResult,
+    operationsTaskResult,
+    operationsChecklistResult,
   ] = await Promise.all([
     supabase.from("service_requests").select("id", { count: "exact", head: true }),
     supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "New"),
@@ -97,6 +127,19 @@ export default async function AdminOverviewPage() {
       .select("id, request_id, action, actor_type, created_at")
       .order("created_at", { ascending: false })
       .limit(8),
+    supabase
+      .from("service_requests")
+      .select("id, company_name, status, priority, assigned_to, due_at, updated_at")
+      .order("created_at", { ascending: false })
+      .limit(250),
+    supabase
+      .from("internal_tasks")
+      .select("id, request_id, title, status, priority, assigned_to, due_at")
+      .limit(500),
+    supabase
+      .from("request_document_checklist")
+      .select("request_id, status")
+      .in("status", ["uploaded", "under_review"]),
   ]);
 
   const results = [
@@ -109,6 +152,9 @@ export default async function AdminOverviewPage() {
     messageResult,
     uploadResult,
     activityResult,
+    operationsRequestResult,
+    operationsTaskResult,
+    operationsChecklistResult,
   ];
   const loadError = results.find((result) => result.error)?.error ?? null;
   if (loadError) {
@@ -118,6 +164,30 @@ export default async function AdminOverviewPage() {
   const messages = (messageResult.data ?? []) as CustomerMessageRow[];
   const uploads = (uploadResult.data ?? []) as RequestFileRow[];
   const activities = (activityResult.data ?? []) as ActivityRow[];
+  const operationsChecklist = (operationsChecklistResult.data ?? []) as OperationsChecklistRow[];
+  const operationalRequests = ((operationsRequestResult.data ?? []) as OperationsRequestRow[]).map(
+    (request): OperationalRequest => ({
+      id: request.id,
+      companyName: request.company_name,
+      status: request.status,
+      priority: request.priority || "normal",
+      assignedTo: request.assigned_to,
+      dueAt: request.due_at,
+      updatedAt: request.updated_at,
+      documentsWaiting: operationsChecklist.filter((item) => item.request_id === request.id).length,
+    }),
+  );
+  const operationalTasks = ((operationsTaskResult.data ?? []) as OperationsTaskRow[]).map(
+    (task): OperationalTask => ({
+      id: task.id,
+      requestId: task.request_id,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+      assignedTo: task.assigned_to,
+      dueAt: task.due_at,
+    }),
+  );
   const requestIds = [
     ...new Set([
       ...messages.map((item) => item.request_id),
@@ -182,6 +252,12 @@ export default async function AdminOverviewPage() {
           </Link>
         ))}
       </section>
+
+      <OperationalAlerts
+        requests={operationalRequests}
+        tasks={operationalTasks}
+        currentUserId={userData.user.id}
+      />
 
       <section className="mt-8 rounded-md border border-navy-100 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-navy-950">Quick links</h2>
