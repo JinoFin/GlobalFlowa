@@ -220,8 +220,15 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  should_log boolean := false;
 begin
-  if new.customer_user_id is not null and new.customer_user_id is distinct from old.customer_user_id then
+  if tg_op = 'INSERT' then
+    should_log := new.customer_user_id is not null;
+  else
+    should_log := new.customer_user_id is not null and new.customer_user_id is distinct from old.customer_user_id;
+  end if;
+  if should_log then
     insert into public.customer_account_activity (user_id, event, details)
     values (new.customer_user_id, 'customer_account_linked', jsonb_build_object('request_id', new.id));
   end if;
@@ -233,8 +240,58 @@ revoke all on function public.log_customer_account_link() from public, anon, aut
 
 drop trigger if exists on_service_request_customer_linked on public.service_requests;
 create trigger on_service_request_customer_linked
-after update of customer_user_id on public.service_requests
+after insert or update of customer_user_id on public.service_requests
 for each row execute function public.log_customer_account_link();
+
+create or replace function public.claim_requests_for_current_customer()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := auth.uid();
+  normalized_email text;
+  claimed_count integer := 0;
+begin
+  if caller_id is null then
+    raise exception 'authentication required' using errcode = '42501';
+  end if;
+
+  select lower(btrim(users.email))
+  into normalized_email
+  from auth.users as users
+  join public.profiles as profiles on profiles.id = users.id
+  where users.id = caller_id
+    and users.email_confirmed_at is not null
+    and profiles.role = 'customer';
+
+  if normalized_email is null or normalized_email = '' then
+    raise exception 'verified customer email required' using errcode = '42501';
+  end if;
+
+  with claimed as (
+    update public.service_requests as requests
+    set customer_user_id = caller_id,
+        updated_at = now()
+    where requests.customer_user_id is null
+      and lower(btrim(requests.customer_email)) = normalized_email
+    returning requests.id
+  ), logged as (
+    insert into public.request_activity_log (request_id, actor_id, actor_type, action, details)
+    select claimed.id, caller_id, 'customer', 'customer_account_linked',
+      jsonb_build_object('linking_method', 'verified_email', 'linked_at', now())
+    from claimed
+    returning 1
+  )
+  select count(*)::integer into claimed_count from claimed;
+
+  return claimed_count;
+end;
+$$;
+
+revoke all on function public.claim_requests_for_current_customer() from public, anon;
+grant execute on function public.claim_requests_for_current_customer() to authenticated;
 
 drop policy if exists "Customers can read own requests" on public.service_requests;
 create policy "Customers can read own requests" on public.service_requests for select to authenticated

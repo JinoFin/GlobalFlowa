@@ -13,7 +13,7 @@ type CustomerSummary = {
   address: string | null;
 };
 
-export function CustomerPortalAccess({ email, customerUserId, summary }: { email: string; customerUserId: string | null; summary: CustomerSummary | null }) {
+export function CustomerPortalAccess({ email, customerUserId, linkedAt, summary }: { email: string; customerUserId: string | null; linkedAt: string | null; summary: CustomerSummary | null }) {
   const [copied, setCopied] = useState(false);
 
   async function copySignupLink() {
@@ -28,6 +28,7 @@ export function CustomerPortalAccess({ email, customerUserId, summary }: { email
         <div><dt className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">Customer email</dt><dd className="mt-1 text-sm text-navy-650">{email}</dd></div>
         <div><dt className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">Portal account</dt><dd className="mt-1 text-sm text-navy-650">{customerUserId ? "Linked" : "Not linked"}</dd></div>
         {customerUserId ? <div className="md:col-span-2"><dt className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">Linked customer identifier</dt><dd className="mt-1 font-mono text-sm text-navy-650">{customerUserId}</dd></div> : null}
+        {linkedAt ? <div className="md:col-span-2"><dt className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">Linked at</dt><dd className="mt-1 text-sm text-navy-650">{linkedAt}</dd></div> : null}
       </dl>
       {summary ? (
         <div className="mt-6 border-t border-navy-100 pt-5">

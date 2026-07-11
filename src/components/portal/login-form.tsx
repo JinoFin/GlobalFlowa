@@ -35,7 +35,12 @@ export function PortalLoginForm({ initialMessage }: { initialMessage?: string })
         return;
       }
 
-      router.push("/portal/requests");
+      const claimResponse = await fetch("/api/portal/claim-requests", { method: "POST" });
+      const claimResult = claimResponse.ok
+        ? await claimResponse.json() as { claimed_count?: number }
+        : { claimed_count: 0 };
+      const claimedCount = claimResult.claimed_count ?? 0;
+      router.push(claimedCount > 0 ? `/portal/requests?linked=${claimedCount}` : "/portal/requests");
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Login failed.");

@@ -161,6 +161,8 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   }
 
   const requestRow = request as RequestRow;
+  const activityRows = (activity ?? []) as ActivityRow[];
+  const linkedActivity = activityRows.find((item) => item.action === "customer_account_linked");
   const [customerProfileResult, customerCompanyResult] = requestRow.customer_user_id
     ? await Promise.all([
         supabase.from("profiles").select("email, full_name, phone, job_title").eq("id", requestRow.customer_user_id).maybeSingle(),
@@ -278,6 +280,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
             <CustomerPortalAccess
               email={customerProfile?.email || requestRow.customer_email || requestRow.email}
               customerUserId={requestRow.customer_user_id}
+              linkedAt={linkedActivity ? new Date(linkedActivity.created_at).toLocaleString() : null}
               summary={requestRow.customer_user_id ? {
                 fullName: customerProfile?.full_name ?? null,
                 phone: customerProfile?.phone ?? null,
@@ -327,7 +330,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
               description="Admin notes and request activity are visible to the Globalflowa team only unless a note was explicitly marked customer-visible."
             />
             <NotesSection notes={(notes ?? []) as NoteRow[]} />
-            <ActivitySection activity={(activity ?? []) as ActivityRow[]} />
+            <ActivitySection activity={activityRows} />
           </div>
 
           <div id="admin-actions" className="scroll-mt-6">

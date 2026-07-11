@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "./portal-ui";
+import { ClaimRequestsButton } from "@/components/portal/claim-requests-button";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 
@@ -24,7 +25,7 @@ type ChecklistRow = {
   required: boolean;
 };
 
-export default async function PortalRequestsPage() {
+export default async function PortalRequestsPage({ searchParams }: { searchParams: Promise<{ linked?: string }> }) {
   let supabase;
 
   try {
@@ -51,6 +52,7 @@ export default async function PortalRequestsPage() {
   }
 
   const requestRows = (requests ?? []) as RequestRow[];
+  const linkedCount = Number.parseInt((await searchParams).linked ?? "", 10);
   const requestIds = requestRows.map((request) => request.id);
   const { data: checklistRows } = requestIds.length
     ? await supabase
@@ -76,12 +78,18 @@ export default async function PortalRequestsPage() {
           <LogoutButtonShell />
         </div>
 
+        {Number.isSafeInteger(linkedCount) && linkedCount > 0 ? (
+          <p className="mt-6 rounded-md border border-teal-200 bg-teal-50 p-4 text-sm font-semibold text-teal-800" role="status">We linked {linkedCount} existing request{linkedCount === 1 ? "" : "s"} to your account.</p>
+        ) : null}
+
         {requestRows.length === 0 ? (
           <div className="mt-8 rounded-md border border-dashed border-navy-200 bg-white p-8 text-center">
             <h2 className="text-xl font-semibold text-navy-950">No linked requests yet</h2>
             <p className="mt-3 text-sm leading-6 text-navy-650">
-              No requests are linked to this account yet. Please contact Globalflowa if you submitted a request with a different email address.
+              No requests are currently linked to this account. Existing requests may have been created with another email address.
             </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-4 text-sm font-semibold"><Link href="/request" className="text-teal-700">Submit a new request</Link><Link href="/contact" className="text-teal-700">Contact Globalflowa</Link></div>
+            <ClaimRequestsButton />
           </div>
         ) : (
           <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">

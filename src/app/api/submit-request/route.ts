@@ -8,6 +8,8 @@ import {
 } from "@/lib/document-checklist";
 import { sendRequestEmails } from "@/lib/email/send";
 import { getMissingEnvironmentVariables } from "@/lib/env";
+import { isVerifiedCustomer } from "@/lib/auth/customer";
+import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { requestPayloadSchema } from "@/lib/validation";
 
@@ -54,6 +56,16 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = parsed.data;
+  let authenticatedCustomer: { id: string; email: string } | null = null;
+  try {
+    const authClient = await createSupabaseServerClient();
+    const { data } = await authClient.auth.getUser();
+    if (data.user?.email && await isVerifiedCustomer(authClient, data.user)) {
+      authenticatedCustomer = { id: data.user.id, email: data.user.email.trim().toLowerCase() };
+    }
+  } catch {
+    // Public guest submissions remain supported when no verified session exists.
+  }
   let supabase;
   try {
     supabase = getSupabaseServiceClient();
@@ -99,7 +111,8 @@ export async function POST(request: NextRequest) {
       deadline: payload.customer.deadline || null,
       message: payload.customer.message ?? null,
       source: "website",
-      customer_email: payload.customer.email,
+      customer_email: authenticatedCustomer?.email ?? payload.customer.email,
+      customer_user_id: authenticatedCustomer?.id ?? null,
       customer_access_enabled: true,
     })
     .select("id")
@@ -270,15 +283,25 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await supabase.from("request_activity_log").insert({
-    request_id: submissionId,
-    action: "submitted",
-    actor_type: "customer",
-    details: {
-      selected_services: payload.selectedServices,
-      checklist_items: checklistItems.length,
+  await supabase.from("request_activity_log").insert([
+    {
+      request_id: submissionId,
+      actor_id: authenticatedCustomer?.id ?? null,
+      action: "submitted",
+      actor_type: "customer",
+      details: {
+        selected_services: payload.selectedServices,
+        checklist_items: checklistItems.length,
+      },
     },
-  });
+    ...(authenticatedCustomer ? [{
+      request_id: submissionId,
+      actor_id: authenticatedCustomer.id,
+      action: "customer_account_linked",
+      actor_type: "customer",
+      details: { linking_method: "authenticated_submission" },
+    }] : []),
+  ]);
 
   try {
     await sendRequestEmails({ payload, submissionId, uploadedFiles, checklistItems });

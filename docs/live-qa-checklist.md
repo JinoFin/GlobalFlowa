@@ -131,6 +131,25 @@ Security note:
 - Use quick actions to open a request, change assignment/priority/due date, open document review, and jump to internal task creation.
 - Confirm `/admin/overview` shows the Phase 5 workload metrics and operational alert sections.
 
+## Phase 6 Secure Request Linking Acceptance
+
+1. Create a guest request using Customer A's email and confirm `customer_user_id` is null.
+2. Sign up Customer A with that exact email and complete email verification.
+3. Enter the customer portal and confirm the unclaimed request links to Customer A and becomes visible.
+4. Repeat the claim and confirm no duplicate `customer_account_linked` request activity is created.
+5. Confirm Customer B cannot view or claim Customer A's request.
+6. Confirm a request already linked to Customer B is never overwritten by Customer A.
+7. Confirm leading/trailing whitespace and email letter case normalize correctly.
+8. Confirm a request addressed to another email remains unclaimed.
+9. Submit a new request while signed in as a verified customer and confirm it is linked immediately using the authenticated identity.
+10. Confirm guest request submission remains available and leaves `customer_user_id` null.
+11. Confirm admin request detail shows linked status, the authorized profile summary, and a reliable link timestamp when activity exists.
+12. Re-test customer messaging, uploads, document review, request assignments, and internal tasks.
+13. Confirm browser-supplied email, user ID, profile ID, or role values cannot influence ownership.
+14. Confirm unauthenticated and unverified callers cannot execute the claim function.
+
+Shared-mailbox limitation: exact verified-email matching means one Supabase Auth account controls all still-unclaimed requests addressed to that login email. Shared company inboxes should therefore be used only where that ownership model is acceptable. Multi-user company membership and claim codes are deferred beyond Phase 6C.
+
 ## Data Workflow
 
 - Confirm `service_requests` contains the submitted request.
@@ -260,7 +279,7 @@ Record the tested deployment URL, Git commit, tester, date, and result before ma
 - Operations remain human-reviewed; there is no AI document review or automatic acceptance.
 - Messaging is structured admin-to-customer email plus portal display, not realtime chat.
 - Pricing, payments, and multilingual localization are outside the current MVP.
-- Customer account provisioning/linking and production acceptance remain operational processes that require careful email ownership checks.
+- Customer request linking uses exact verified-email matching for unclaimed requests; shared-mailbox ownership remains a documented limitation pending a future membership model.
 - Migrations are intentionally manual; the application does not apply live schema changes during deploy.
 
 ## Manual Live Acceptance Test

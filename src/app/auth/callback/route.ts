@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
+import { claimRequestsForCurrentCustomer } from "@/lib/portal/claim-requests";
 import { safeAuthDestination } from "@/lib/auth/redirects";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 
@@ -38,7 +39,15 @@ export async function GET(request: Request) {
       return NextResponse.redirect(loginError);
     }
 
-    return NextResponse.redirect(new URL(destination, url.origin));
+    let claimedCount = 0;
+    try {
+      claimedCount = await claimRequestsForCurrentCustomer(supabase);
+    } catch {
+      console.warn("Verified customer request claim deferred", { userId: data.user.id });
+    }
+    const redirectUrl = new URL(destination, url.origin);
+    if (claimedCount > 0 && destination === "/portal") redirectUrl.searchParams.set("linked", String(claimedCount));
+    return NextResponse.redirect(redirectUrl);
   } catch {
     return NextResponse.redirect(loginError);
   }
