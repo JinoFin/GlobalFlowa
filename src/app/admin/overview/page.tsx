@@ -188,6 +188,7 @@ export default async function AdminOverviewPage() {
         <div className="mt-4 flex flex-wrap gap-3">
           {[
             ["Requests", "/admin/requests"],
+            ["Workboard", "/admin/workboard"],
             ["Document Review", "/admin/document-review"],
             ["Services", "/admin/services"],
             ["Export", "/api/admin/export"],

@@ -171,6 +171,7 @@ function DocumentReviewPageShell({
             <div className="flex flex-wrap gap-4 text-sm font-semibold text-teal-700">
               <Link href="/admin/overview">Overview</Link>
               <Link href="/admin/requests">Requests</Link>
+              <Link href="/admin/workboard">Workboard</Link>
             </div>
             <p className="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
               Admin dashboard
