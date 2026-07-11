@@ -10,6 +10,7 @@ import {
   type CustomerMessageChecklistItem,
 } from "@/components/admin/customer-message-section";
 import { RequestActions } from "@/components/admin/request-actions";
+import { CustomerPortalAccess } from "@/components/admin/customer-portal-access";
 import {
   InternalTasksSection,
   type InternalTaskItem,
@@ -258,6 +259,11 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
                 Deadline: requestRow.deadline,
                 Message: requestRow.message,
               }}
+            />
+
+            <CustomerPortalAccess
+              email={requestRow.customer_email || requestRow.email}
+              customerUserId={requestRow.customer_user_id}
             />
 
             <ListSection

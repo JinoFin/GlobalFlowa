@@ -4,7 +4,13 @@ export const metadata = {
   title: "Customer Portal Login",
 };
 
-export default function PortalLoginPage() {
+export default async function PortalLoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
+  const initialMessage = error === "verification_failed"
+    ? "That verification or recovery link is invalid or expired. Please request a new link."
+    : error === "account_unavailable"
+      ? "This account cannot access the customer portal. Please contact Globalflowa support."
+      : undefined;
   return (
     <div className="bg-navy-50 px-4 py-16 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-md rounded-md border border-navy-100 bg-white p-8 shadow-sm">
@@ -18,7 +24,7 @@ export default function PortalLoginPage() {
           Access your Globalflowa request status and upload missing or corrected documents securely.
         </p>
         <div className="mt-8">
-          <PortalLoginForm />
+          <PortalLoginForm initialMessage={initialMessage} />
         </div>
       </div>
     </div>

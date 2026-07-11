@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "./portal-ui";
+import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
-import { linkCustomerRequestsByEmail } from "@/lib/portal/customer-linking";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -34,22 +34,16 @@ export default async function PortalRequestsPage() {
   }
 
   const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user?.email) {
+  const user = userData.user;
+  if (!user || !(await isVerifiedCustomer(supabase, user))) {
     redirect("/portal/login");
   }
-
-  await linkCustomerRequestsByEmail(userData.user);
-  const ownerFilter = [
-    `customer_user_id.eq.${userData.user.id}`,
-    `customer_email.ilike.${userData.user.email}`,
-    `email.ilike.${userData.user.email}`,
-  ].join(",");
 
   const { data: requests, error } = await supabase
     .from("service_requests")
     .select("id, created_at, status, urgency, company_name, main_service")
     .eq("customer_access_enabled", true)
-    .or(ownerFilter)
+    .eq("customer_user_id", user.id)
     .order("created_at", { ascending: false });
 
   if (error) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -31,7 +32,7 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
   }
 
   const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
+  if (!(await isVerifiedCustomer(supabase, userData.user))) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 

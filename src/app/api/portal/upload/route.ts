@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendCustomerUploadEmail } from "@/lib/email/send";
+import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
 
   const { data: userData } = await authClient.auth.getUser();
   const user = userData.user;
-  if (!user?.email) {
+  if (!user?.email || !(await isVerifiedCustomer(authClient, user))) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
     .eq("id", requestId)
     .maybeSingle();
 
-  if (requestError || !requestRow || !customerOwnsRequest(requestRow as RequestRow, user.id, user.email)) {
+  if (requestError || !requestRow || !customerOwnsRequest(requestRow as RequestRow, user.id)) {
     console.warn("Customer upload ownership check failed", {
       requestId,
       userId: user.id,
@@ -244,12 +245,7 @@ export async function POST(request: Request) {
   });
 }
 
-function customerOwnsRequest(request: RequestRow, userId: string, userEmail: string) {
+function customerOwnsRequest(request: RequestRow, userId: string) {
   if (!request.customer_access_enabled) return false;
-  if (request.customer_user_id && request.customer_user_id === userId) return true;
-
-  const email = userEmail.trim().toLowerCase();
-  return [request.customer_email, request.email]
-    .filter(Boolean)
-    .some((value) => value?.trim().toLowerCase() === email);
+  return request.customer_user_id === userId;
 }

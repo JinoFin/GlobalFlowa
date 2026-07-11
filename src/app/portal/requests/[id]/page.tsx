@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DocumentUploadForm } from "@/components/portal/document-upload-form";
 import { checklistCategories } from "@/lib/document-checklist";
-import { linkCustomerRequestsByEmail } from "@/lib/portal/customer-linking";
+import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "../portal-ui";
 
@@ -93,16 +93,10 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
   }
 
   const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user?.email) {
+  const user = userData.user;
+  if (!user || !(await isVerifiedCustomer(supabase, user))) {
     redirect("/portal/login");
   }
-
-  await linkCustomerRequestsByEmail(userData.user);
-  const ownerFilter = [
-    `customer_user_id.eq.${userData.user.id}`,
-    `customer_email.ilike.${userData.user.email}`,
-    `email.ilike.${userData.user.email}`,
-  ].join(",");
 
   const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: customerMessages }] =
     await Promise.all([
@@ -111,7 +105,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
         .select("id, created_at, status, company_name, contact_person, email, country, preferred_language, main_service, urgency, deadline, message")
         .eq("id", id)
         .eq("customer_access_enabled", true)
-        .or(ownerFilter)
+        .eq("customer_user_id", user.id)
         .maybeSingle(),
       supabase.from("request_services").select("service_name, service_slug").eq("request_id", id),
       supabase.from("request_answers").select("*").eq("request_id", id).order("created_at"),
