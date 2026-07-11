@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { passwordConfirmationSchema } from "@/lib/auth/validation";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 
@@ -15,13 +16,11 @@ export async function POST(request: Request) {
   }
 
   const cookieStore = await cookies();
-  if (cookieStore.get("gf-recovery")?.value !== "1") {
-    return NextResponse.json({ ok: false, message: "This password-recovery link is invalid or expired." }, { status: 401 });
-  }
+  const recoverySession = cookieStore.get("gf-recovery")?.value === "1";
 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
-  if (!data.user) {
+  if (!data.user || (!recoverySession && !(await isVerifiedCustomer(supabase, data.user)))) {
     return NextResponse.json({ ok: false, message: "This password-recovery link is invalid or expired." }, { status: 401 });
   }
 
@@ -33,6 +32,6 @@ export async function POST(request: Request) {
     );
   }
 
-  cookieStore.delete("gf-recovery");
+  if (recoverySession) cookieStore.delete("gf-recovery");
   return NextResponse.json({ ok: true });
 }

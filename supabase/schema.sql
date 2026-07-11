@@ -6,7 +6,11 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now(),
   full_name text,
   role text not null default 'customer' check (role in ('admin', 'team', 'customer')),
-  email text
+  email text,
+  phone text,
+  job_title text,
+  preferred_language text,
+  timezone text
 );
 
 create table if not exists public.services (
@@ -212,14 +216,39 @@ create table if not exists public.internal_tasks (
 create table if not exists public.customer_account_activity (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
-  event text not null check (event in ('customer_signed_up', 'customer_email_verified', 'customer_account_linked')),
+  event text not null check (event in ('customer_signed_up', 'customer_email_verified', 'customer_account_linked', 'customer_personal_profile_updated', 'customer_company_profile_updated')),
   details jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
+);
+
+create table if not exists public.customer_companies (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  owner_user_id uuid not null references public.profiles(id) on delete cascade,
+  legal_name text,
+  trading_name text,
+  registration_number text,
+  vat_number text,
+  country_code text,
+  address_line_1 text,
+  address_line_2 text,
+  city text,
+  postal_code text,
+  website text,
+  contact_name text,
+  contact_email text,
+  contact_phone text,
+  constraint customer_companies_owner_user_id_key unique (owner_user_id)
 );
 
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'team', 'customer'));
 alter table public.profiles alter column role set default 'customer';
+alter table public.profiles add column if not exists phone text;
+alter table public.profiles add column if not exists job_title text;
+alter table public.profiles add column if not exists preferred_language text;
+alter table public.profiles add column if not exists timezone text;
 
 alter table public.service_requests add column if not exists customer_user_id uuid references auth.users(id);
 alter table public.service_requests add column if not exists customer_email text;
@@ -307,6 +336,7 @@ create index if not exists idx_internal_tasks_request_id on public.internal_task
 create index if not exists idx_internal_tasks_assigned_to on public.internal_tasks(assigned_to);
 create index if not exists idx_internal_tasks_status on public.internal_tasks(status);
 create index if not exists idx_internal_tasks_due_at on public.internal_tasks(due_at);
+create index if not exists idx_customer_companies_owner_user_id on public.customer_companies(owner_user_id);
 
 alter table public.profiles enable row level security;
 alter table public.services enable row level security;
@@ -324,10 +354,13 @@ alter table public.customer_messages enable row level security;
 alter table public.request_activity_log enable row level security;
 alter table public.internal_tasks enable row level security;
 alter table public.customer_account_activity enable row level security;
+alter table public.customer_companies enable row level security;
 
 grant select on public.services to anon, authenticated;
 grant select on public.service_questions to anon, authenticated;
 grant select, insert, update, delete on public.profiles to authenticated;
+revoke update on public.profiles from authenticated;
+grant update (full_name, phone, job_title, preferred_language, timezone, updated_at) on public.profiles to authenticated;
 grant select, insert, update, delete on public.service_requests to authenticated;
 grant select, insert, update, delete on public.request_services to authenticated;
 grant select, insert, update, delete on public.request_answers to authenticated;
@@ -342,6 +375,8 @@ grant select, insert, update on public.customer_messages to authenticated;
 grant select, insert, update, delete on public.request_activity_log to authenticated;
 revoke all on public.customer_account_activity from anon, authenticated;
 grant select on public.customer_account_activity to authenticated;
+revoke all on public.customer_companies from anon, authenticated;
+grant select, insert, update on public.customer_companies to authenticated;
 revoke all on public.internal_tasks from anon, authenticated;
 grant select, insert, update, delete on public.internal_tasks to authenticated;
 
@@ -434,11 +469,49 @@ using (
 
 drop policy if exists "Admins can manage profiles" on public.profiles;
 drop policy if exists "Users can read own profile" on public.profiles;
+drop policy if exists "Customers can update own personal profile" on public.profiles;
+drop policy if exists "Admin and team can read customer profiles" on public.profiles;
+drop policy if exists "Customers can read own company" on public.customer_companies;
+drop policy if exists "Customers can insert own company" on public.customer_companies;
+drop policy if exists "Customers can update own company" on public.customer_companies;
+drop policy if exists "Admin and team can read customer companies" on public.customer_companies;
 
 create policy "Users can read own profile"
 on public.profiles for select
 to authenticated
 using ((select auth.uid()) = id);
+
+create policy "Customers can update own personal profile"
+on public.profiles for update
+to authenticated
+using ((select public.is_verified_customer()) and id = (select auth.uid()))
+with check ((select public.is_verified_customer()) and id = (select auth.uid()));
+
+create policy "Admin and team can read customer profiles"
+on public.profiles for select
+to authenticated
+using ((select public.is_admin_or_team()) and role = 'customer');
+
+create policy "Customers can read own company"
+on public.customer_companies for select
+to authenticated
+using ((select public.is_verified_customer()) and owner_user_id = (select auth.uid()));
+
+create policy "Customers can insert own company"
+on public.customer_companies for insert
+to authenticated
+with check ((select public.is_verified_customer()) and owner_user_id = (select auth.uid()));
+
+create policy "Customers can update own company"
+on public.customer_companies for update
+to authenticated
+using ((select public.is_verified_customer()) and owner_user_id = (select auth.uid()))
+with check ((select public.is_verified_customer()) and owner_user_id = (select auth.uid()));
+
+create policy "Admin and team can read customer companies"
+on public.customer_companies for select
+to authenticated
+using ((select public.is_admin_or_team()));
 
 create policy "Admins can manage profiles"
 on public.profiles for all
@@ -716,6 +789,42 @@ revoke all on function public.log_customer_account_link() from public, anon, aut
 drop trigger if exists on_service_request_customer_linked on public.service_requests;
 create trigger on_service_request_customer_linked after update of customer_user_id on public.service_requests
 for each row execute function public.log_customer_account_link();
+
+create or replace function public.log_customer_personal_profile_update()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare changed_fields text[] := array[]::text[];
+begin
+  if new.full_name is distinct from old.full_name then changed_fields := array_append(changed_fields, 'full_name'); end if;
+  if new.phone is distinct from old.phone then changed_fields := array_append(changed_fields, 'phone'); end if;
+  if new.job_title is distinct from old.job_title then changed_fields := array_append(changed_fields, 'job_title'); end if;
+  if new.preferred_language is distinct from old.preferred_language then changed_fields := array_append(changed_fields, 'preferred_language'); end if;
+  if new.timezone is distinct from old.timezone then changed_fields := array_append(changed_fields, 'timezone'); end if;
+  if cardinality(changed_fields) > 0 and new.role = 'customer' then
+    insert into public.customer_account_activity (user_id, event, details)
+    values (new.id, 'customer_personal_profile_updated', jsonb_build_object('changed_fields', changed_fields));
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.log_customer_personal_profile_update() from public, anon, authenticated;
+drop trigger if exists on_customer_personal_profile_updated on public.profiles;
+create trigger on_customer_personal_profile_updated after update of full_name, phone, job_title, preferred_language, timezone on public.profiles
+for each row execute function public.log_customer_personal_profile_update();
+
+create or replace function public.log_customer_company_profile_update()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  insert into public.customer_account_activity (user_id, event, details)
+  values (new.owner_user_id, 'customer_company_profile_updated', jsonb_build_object('operation', lower(tg_op)));
+  return new;
+end;
+$$;
+
+revoke all on function public.log_customer_company_profile_update() from public, anon, authenticated;
+drop trigger if exists on_customer_company_profile_updated on public.customer_companies;
+create trigger on_customer_company_profile_updated after insert or update on public.customer_companies
+for each row execute function public.log_customer_company_profile_update();
 
 insert into storage.buckets (id, name, public)
 values ('request-documents', 'request-documents', false)

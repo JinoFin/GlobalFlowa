@@ -106,6 +106,9 @@ type StaffProfileRow = {
   role: string;
 };
 
+type CustomerProfileRow = { email: string | null; full_name: string | null; phone: string | null; job_title: string | null };
+type CustomerCompanyRow = { legal_name: string | null; country_code: string | null; registration_number: string | null; vat_number: string | null; address_line_1: string | null; address_line_2: string | null; city: string | null; postal_code: string | null };
+
 export default async function RequestDetailPage({ params }: RequestDetailPageProps) {
   const { id } = await params;
   let supabase;
@@ -158,6 +161,17 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   }
 
   const requestRow = request as RequestRow;
+  const [customerProfileResult, customerCompanyResult] = requestRow.customer_user_id
+    ? await Promise.all([
+        supabase.from("profiles").select("email, full_name, phone, job_title").eq("id", requestRow.customer_user_id).maybeSingle(),
+        supabase.from("customer_companies").select("legal_name, country_code, registration_number, vat_number, address_line_1, address_line_2, city, postal_code").eq("owner_user_id", requestRow.customer_user_id).maybeSingle(),
+      ])
+    : [{ data: null }, { data: null }];
+  const customerProfile = customerProfileResult.data as CustomerProfileRow | null;
+  const customerCompany = customerCompanyResult.data as CustomerCompanyRow | null;
+  const companyAddress = customerCompany
+    ? [customerCompany.address_line_1, customerCompany.address_line_2, customerCompany.postal_code, customerCompany.city].filter(Boolean).join(", ") || null
+    : null;
   const staffRows = (staffProfiles ?? []) as StaffProfileRow[];
   const staffOptions = staffRows.map((profile) => ({
     id: profile.id,
@@ -262,8 +276,18 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
             />
 
             <CustomerPortalAccess
-              email={requestRow.customer_email || requestRow.email}
+              email={customerProfile?.email || requestRow.customer_email || requestRow.email}
               customerUserId={requestRow.customer_user_id}
+              summary={requestRow.customer_user_id ? {
+                fullName: customerProfile?.full_name ?? null,
+                phone: customerProfile?.phone ?? null,
+                jobTitle: customerProfile?.job_title ?? null,
+                legalName: customerCompany?.legal_name ?? null,
+                countryCode: customerCompany?.country_code ?? null,
+                registrationNumber: customerCompany?.registration_number ?? null,
+                vatNumber: customerCompany?.vat_number ?? null,
+                address: companyAddress,
+              } : null}
             />
 
             <ListSection
