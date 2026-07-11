@@ -11,6 +11,7 @@ import {
 } from "@/components/admin/customer-message-section";
 import { RequestActions } from "@/components/admin/request-actions";
 import { CustomerPortalAccess } from "@/components/admin/customer-portal-access";
+import { CustomerLifecycleProgress } from "@/components/admin/customer-lifecycle-progress";
 import {
   InternalTasksSection,
   type InternalTaskItem,
@@ -43,6 +44,8 @@ type RequestRow = {
   customer_email: string | null;
   customer_user_id: string | null;
   customer_access_enabled: boolean | null;
+  lifecycle_stage: string | null;
+  lifecycle_stage_updated_at: string | null;
   phone: string | null;
   whatsapp: string | null;
   wechat: string | null;
@@ -241,6 +244,8 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
                 </Link>
               </div>
             </section>
+
+            <CustomerLifecycleProgress requestId={requestRow.id} initialStage={requestRow.lifecycle_stage} updatedAt={requestRow.lifecycle_stage_updated_at} />
 
             <RequestOwnershipSection
               requestId={requestRow.id}
@@ -597,6 +602,8 @@ function describeActivity(details: Record<string, unknown>) {
     details.file_name,
     details.subject,
     details.status,
+    typeof details.previous_stage === "string" ? `From ${details.previous_stage.replaceAll("_", " ")}` : null,
+    typeof details.new_stage === "string" ? `To ${details.new_stage.replaceAll("_", " ")}` : null,
     typeof details.previous_status === "string" ? `Previously ${details.previous_status}` : null,
   ]
     .filter((value): value is string => typeof value === "string" && value.length > 0);

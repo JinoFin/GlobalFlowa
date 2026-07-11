@@ -150,6 +150,19 @@ Security note:
 
 Shared-mailbox limitation: exact verified-email matching means one Supabase Auth account controls all still-unclaimed requests addressed to that login email. Shared company inboxes should therefore be used only where that ownership model is acceptable. Multi-user company membership and claim codes are deferred beyond Phase 6C.
 
+## Phase 6 Customer Lifecycle Acceptance
+
+1. Confirm a new request starts at `received`.
+2. Change it to `initial_review` and confirm the customer sees Initial review.
+3. Send a missing-document request and confirm the customer sees Waiting for documents.
+4. Upload the missing file and confirm Documents under review where configured.
+5. Change to `processing`, `external_processing`, and `final_review`; confirm safe customer wording and no-action guidance.
+6. Confirm an invalid stage update is rejected and an unchanged update creates no duplicate activity.
+7. Confirm a customer cannot call the lifecycle API or update lifecycle columns directly.
+8. Confirm portal queries never expose `lifecycle_stage_updated_by`, assignments, tasks, priorities, or deadlines.
+9. Confirm automatic transitions never overwrite `completed` or `archived`.
+10. Re-test messaging, uploads, document review, profiles, signup, password recovery, and secure request linking.
+
 ## Data Workflow
 
 - Confirm `service_requests` contains the submitted request.

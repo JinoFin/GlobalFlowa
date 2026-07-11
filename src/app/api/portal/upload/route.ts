@@ -14,6 +14,7 @@ type RequestRow = {
   customer_email: string | null;
   customer_user_id: string | null;
   customer_access_enabled: boolean;
+  lifecycle_stage: string;
 };
 
 type ChecklistRow = {
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
 
   const { data: requestRow, error: requestError } = await serviceClient
     .from("service_requests")
-    .select("id, company_name, email, customer_email, customer_user_id, customer_access_enabled")
+    .select("id, company_name, email, customer_email, customer_user_id, customer_access_enabled, lifecycle_stage")
     .eq("id", requestId)
     .maybeSingle();
 
@@ -187,6 +188,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not update the checklist item." }, { status: 500 });
   }
 
+  const lifecycleAdvanced = Boolean(fileId) && ["required", "missing", "incorrect", "expired"].includes(checklistBeforeUpload.status) && !["completed", "archived"].includes((requestRow as RequestRow).lifecycle_stage);
+  if (lifecycleAdvanced) {
+    await serviceClient.from("service_requests").update({ lifecycle_stage: "document_review", lifecycle_stage_updated_at: new Date().toISOString() }).eq("id", requestId);
+  }
+
   const { error: activityError } = await serviceClient.from("request_activity_log").insert({
     request_id: requestId,
     actor_id: null,
@@ -215,6 +221,7 @@ export async function POST(request: Request) {
       reason: activityError.message,
     });
   }
+  if (lifecycleAdvanced) await serviceClient.from("request_activity_log").insert({ request_id: requestId, actor_id: null, actor_type: "customer", action: "lifecycle_stage_changed", details: { previous_stage: (requestRow as RequestRow).lifecycle_stage, new_stage: "document_review", changed_at: new Date().toISOString() } });
 
   if (fileId) {
     sendCustomerUploadEmail({

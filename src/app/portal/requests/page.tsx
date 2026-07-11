@@ -4,6 +4,7 @@ import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "
 import { ClaimRequestsButton } from "@/components/portal/claim-requests-button";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { getCustomerNextAction, lifecycleInfo, lifecycleProgress, normalizeLifecycleStage } from "@/lib/request-lifecycle";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -17,6 +18,8 @@ type RequestRow = {
   urgency: string | null;
   company_name: string;
   main_service: string | null;
+  lifecycle_stage: string;
+  lifecycle_stage_updated_at: string | null;
 };
 
 type ChecklistRow = {
@@ -42,7 +45,7 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
 
   const { data: requests, error } = await supabase
     .from("service_requests")
-    .select("id, created_at, status, urgency, company_name, main_service")
+    .select("id, created_at, company_name, main_service, lifecycle_stage, lifecycle_stage_updated_at")
     .eq("customer_access_enabled", true)
     .eq("customer_user_id", user.id)
     .order("created_at", { ascending: false });
@@ -61,6 +64,8 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
         .in("request_id", requestIds)
     : { data: [] };
   const summaries = summarizeChecklist((checklistRows ?? []) as ChecklistRow[]);
+  const checklistByRequest = new Map<string, ChecklistRow[]>();
+  for (const item of (checklistRows ?? []) as ChecklistRow[]) checklistByRequest.set(item.request_id, [...(checklistByRequest.get(item.request_id) ?? []), item]);
 
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
@@ -95,6 +100,8 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
           <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {requestRows.map((request) => {
               const summary = summaries.get(request.id) ?? { total: 0, accepted: 0, action: 0, percent: 0 };
+              const stage = normalizeLifecycleStage(request.lifecycle_stage);
+              const nextAction = getCustomerNextAction({ stage, checklist: checklistByRequest.get(request.id) ?? [] });
               return (
                 <Link
                   key={request.id}
@@ -106,10 +113,13 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
                       <p className="font-mono text-xs text-navy-500">{request.id.slice(0, 8)}</p>
                       <h2 className="mt-2 text-lg font-semibold text-navy-950">{request.company_name}</h2>
                     </div>
-                    <StatusBadge status={request.status} />
+                    <StatusBadge status={lifecycleInfo[stage].label} />
                   </div>
                   <p className="mt-3 text-sm text-navy-650">{request.main_service ?? "Service request"}</p>
                   <p className="mt-1 text-xs text-navy-500">{formatDate(request.created_at)}</p>
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-navy-100"><div className="h-full rounded-full bg-teal-600" style={{ width: `${lifecycleProgress(stage)}%` }} /></div>
+                  <p className="mt-2 text-sm font-semibold text-navy-700">{nextAction.label}</p>
+                  {request.lifecycle_stage_updated_at ? <p className="mt-1 text-xs text-navy-500">Progress updated {formatDate(request.lifecycle_stage_updated_at)}</p> : null}
                   <div className="mt-5">
                     <div className="h-2 overflow-hidden rounded-full bg-navy-100">
                       <div className="h-full rounded-full bg-teal-600" style={{ width: `${summary.percent}%` }} />

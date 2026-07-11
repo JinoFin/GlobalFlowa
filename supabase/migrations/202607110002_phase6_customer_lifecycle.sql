@@ -18,6 +18,20 @@ alter table public.profiles add column if not exists job_title text;
 alter table public.profiles add column if not exists preferred_language text;
 alter table public.profiles add column if not exists timezone text;
 
+alter table public.service_requests add column if not exists lifecycle_stage text not null default 'received';
+alter table public.service_requests add column if not exists lifecycle_stage_updated_at timestamptz;
+alter table public.service_requests add column if not exists lifecycle_stage_updated_by uuid references public.profiles(id) on delete set null;
+update public.service_requests set lifecycle_stage = case status
+  when 'New' then 'received' when 'In Review' then 'initial_review'
+  when 'Missing Documents' then 'waiting_for_documents' when 'Waiting for Customer' then 'waiting_for_documents'
+  when 'Submitted to Authority' then 'external_processing' when 'In Progress' then 'processing'
+  when 'Completed' then 'completed' else 'received' end
+where lifecycle_stage = 'received' and lifecycle_stage_updated_at is null;
+alter table public.service_requests drop constraint if exists service_requests_lifecycle_stage_check;
+alter table public.service_requests add constraint service_requests_lifecycle_stage_check check (lifecycle_stage in ('received','initial_review','waiting_for_documents','document_review','processing','external_processing','final_review','completed','archived'));
+create index if not exists idx_service_requests_lifecycle_stage on public.service_requests(lifecycle_stage);
+create index if not exists idx_service_requests_lifecycle_updated_at on public.service_requests(lifecycle_stage_updated_at);
+
 create table if not exists public.customer_companies (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),

@@ -2,6 +2,8 @@
 
 Professional B2B website and service request portal for Globalflowa, a Germany market-entry, compliance, warehouse, labeling, packing, and marketplace preparation partner for foreign sellers.
 
+Customer lifecycle tracking is separate from internal request status. Allowed customer stages are `received`, `initial_review`, `waiting_for_documents`, `document_review`, `processing`, `external_processing`, `final_review`, `completed`, and `archived`. Admin/team users control the stage through a protected API; portal queries expose only the stage and update time. Missing-document messages and requested-document uploads apply the only automatic transitions, and never overwrite completed or archived stages. Customer next actions prioritize corrections, missing documents, action messages, and uploads under review before the general lifecycle stage.
+
 ## Phase 1 scope
 
 - Homepage and premium B2B public website

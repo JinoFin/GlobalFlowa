@@ -23,6 +23,7 @@ type RequestRow = {
   email: string;
   customer_email: string | null;
   status: string;
+  lifecycle_stage: string;
 };
 
 type ChecklistRow = {
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
 
   const { data: requestData, error: requestError } = await supabase
     .from("service_requests")
-    .select("id, company_name, email, customer_email, status")
+    .select("id, company_name, email, customer_email, status, lifecycle_stage")
     .eq("id", payload.request_id)
     .maybeSingle();
 
@@ -223,7 +224,7 @@ export async function POST(request: Request) {
   if (waitingStatuses.has(requestRow.status)) {
     const { data: updatedRequest, error: statusError } = await supabase
       .from("service_requests")
-      .update({ status: "Waiting for Customer", updated_at: now })
+      .update({ status: "Waiting for Customer", updated_at: now, ...(!["completed", "archived"].includes(requestRow.lifecycle_stage) ? { lifecycle_stage: "waiting_for_documents", lifecycle_stage_updated_at: now, lifecycle_stage_updated_by: user.id } : {}) })
       .eq("id", payload.request_id)
       .eq("status", requestRow.status)
       .select("status")
@@ -238,6 +239,7 @@ export async function POST(request: Request) {
       });
     } else if (updatedRequest) {
       requestStatus = updatedRequest.status as string;
+      if (!["completed", "archived", "waiting_for_documents"].includes(requestRow.lifecycle_stage)) await supabase.from("request_activity_log").insert({ request_id: payload.request_id, actor_id: user.id, actor_type: "admin", action: "lifecycle_stage_changed", details: { previous_stage: requestRow.lifecycle_stage, new_stage: "waiting_for_documents", changed_at: now } });
     } else {
       const { data: latestRequest } = await supabase
         .from("service_requests")
