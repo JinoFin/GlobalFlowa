@@ -20,6 +20,9 @@ type RequestRow = {
   created_at: string;
   lifecycle_stage: string;
   lifecycle_stage_updated_at: string | null;
+  completed_at: string | null;
+  customer_completion_note: string | null;
+  archived_at: string | null;
   company_name: string;
   contact_person: string;
   email: string;
@@ -116,7 +119,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
     await Promise.all([
       supabase
         .from("service_requests")
-        .select("id, created_at, lifecycle_stage, lifecycle_stage_updated_at, company_name, contact_person, email, country, preferred_language, main_service, urgency, deadline, message")
+        .select("id, created_at, lifecycle_stage, lifecycle_stage_updated_at, completed_at, customer_completion_note, archived_at, company_name, contact_person, email, country, preferred_language, main_service, urgency, deadline, message")
         .eq("id", id)
         .eq("customer_access_enabled", true)
         .eq("customer_user_id", user.id)
@@ -188,6 +191,8 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="space-y-6">
+            {lifecycleStage === "completed" ? <section className="rounded-md border border-teal-300 bg-teal-50 p-6"><h2 className="text-xl font-semibold text-teal-950">Request completed</h2><p className="mt-2 text-sm text-teal-900">{deliverableRows.length ? "Your request is complete. Your final documents are ready to download." : "Your request is complete. Final documents will appear here when they are published."}</p>{requestRow.customer_completion_note ? <p className="mt-3 text-sm text-teal-900">{requestRow.customer_completion_note}</p> : null}{requestRow.completed_at ? <p className="mt-2 text-xs text-teal-800">Completed {formatDate(requestRow.completed_at)}</p> : null}</section> : null}
+            {lifecycleStage === "archived" ? <section className="rounded-md border border-navy-300 bg-navy-100 p-6"><h2 className="text-xl font-semibold text-navy-950">Archived request</h2><p className="mt-2 text-sm text-navy-700">This request is retained for reference and is read-only. Published final documents remain available.</p>{requestRow.archived_at ? <p className="mt-2 text-xs text-navy-600">Archived {formatDate(requestRow.archived_at)}</p> : null}</section> : null}
             <LifecycleProgress stage={lifecycleStage} updatedAt={requestRow.lifecycle_stage_updated_at} nextAction={nextAction.label} />
             <FinalDocuments files={deliverableRows} completed={lifecycleStage === "completed"} />
             <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">
@@ -250,6 +255,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
                               files={fileRows.filter(
                                 (file) => file.linked_checklist_item_id === item.id || item.linked_file_id === file.id,
                               )}
+                              acceptsUploads={!(["completed", "archived"].includes(lifecycleStage))}
                             />
                           ))}
                         </div>
@@ -335,10 +341,12 @@ function ChecklistItemCard({
   requestId,
   item,
   files,
+  acceptsUploads,
 }: {
   requestId: string;
   item: ChecklistRow;
   files: FileRow[];
+  acceptsUploads: boolean;
 }) {
   const actionNeeded = needsCustomerAction(item);
   const lastUploaded = files[0] ?? null;
@@ -398,12 +406,7 @@ function ChecklistItemCard({
         </div>
       ) : null}
 
-      <DocumentUploadForm
-        requestId={requestId}
-        checklistItemId={item.id}
-        existingNote={item.customer_note}
-        isReplacement={["incorrect", "expired"].includes(item.status)}
-      />
+      {acceptsUploads ? <DocumentUploadForm requestId={requestId} checklistItemId={item.id} existingNote={item.customer_note} isReplacement={["incorrect", "expired"].includes(item.status)} /> : <p className="mt-4 rounded-md bg-navy-50 p-3 text-sm font-semibold text-navy-650">This request is no longer accepting uploads.</p>}
     </div>
   );
 }

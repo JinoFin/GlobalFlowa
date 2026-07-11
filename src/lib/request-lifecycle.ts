@@ -1,5 +1,17 @@
 export const lifecycleStages = ["received", "initial_review", "waiting_for_documents", "document_review", "processing", "external_processing", "final_review", "completed", "archived"] as const;
 export type LifecycleStage = (typeof lifecycleStages)[number];
+export const activeLifecycleStages = ["initial_review", "waiting_for_documents", "document_review", "processing", "external_processing", "final_review"] as const;
+export const editableLifecycleStages = ["received", ...activeLifecycleStages] as const;
+
+export const completionWarningLabels: Record<string, string> = {
+  missing_required_documents: "Required documents are still missing.",
+  rejected_or_expired_documents: "Required documents are rejected or expired.",
+  documents_waiting_for_review: "Customer uploads are still waiting for review.",
+  open_internal_tasks: "Internal tasks remain open.",
+  outstanding_customer_action: "The request is waiting for customer action.",
+  no_published_final_deliverables: "No final deliverable has been published.",
+  not_in_final_review: "The request has not reached final review.",
+};
 
 export const lifecycleInfo: Record<LifecycleStage, { label: string; description: string; next: string }> = {
   received: { label: "Request received", description: "We received your request and will begin the initial review.", next: "Our team will begin the initial review." },
@@ -22,12 +34,12 @@ export function lifecycleProgress(stage: LifecycleStage) {
 }
 
 export function getCustomerNextAction({ stage, checklist, hasActionMessage = false, hasPublishedDeliverables = false }: { stage: LifecycleStage; checklist: Array<{ status: string; required: boolean }>; hasActionMessage?: boolean; hasPublishedDeliverables?: boolean }) {
-  if (stage === "archived") return { label: "No further action available", tone: "archived" };
+  if (stage === "archived") return { label: "No further action is available for this archived request", tone: "archived" };
+  if (stage === "completed") return { label: hasPublishedDeliverables ? "Download your final documents" : "Final documents will be available soon", tone: "completed" };
   if (checklist.some((item) => item.required && ["incorrect", "expired"].includes(item.status))) return { label: "Upload a corrected document", tone: "action" };
   if (checklist.some((item) => item.required && ["required", "missing"].includes(item.status))) return { label: "Upload the required document", tone: "action" };
   if (hasActionMessage) return { label: "Review the latest message", tone: "action" };
   if (checklist.some((item) => ["uploaded", "under_review"].includes(item.status))) return { label: "No action required — document under review", tone: "review" };
-  if (stage === "completed") return { label: hasPublishedDeliverables ? "Download your final documents" : "Final documents will be available soon", tone: "completed" };
   if (stage === "waiting_for_documents") return { label: "Provide the requested information", tone: "action" };
   if (stage === "final_review") return { label: "No action required — final review in progress", tone: "processing" };
   if (["processing", "external_processing"].includes(stage)) return { label: "No action required", tone: "processing" };

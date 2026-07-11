@@ -13,6 +13,7 @@ import { RequestActions } from "@/components/admin/request-actions";
 import { CustomerPortalAccess } from "@/components/admin/customer-portal-access";
 import { CustomerLifecycleProgress } from "@/components/admin/customer-lifecycle-progress";
 import { FinalDeliverablesSection, type AdminFinalDeliverable } from "@/components/admin/final-deliverables-section";
+import { RequestCompletionArchive } from "@/components/admin/request-completion-archive";
 import {
   InternalTasksSection,
   type InternalTaskItem,
@@ -23,6 +24,7 @@ import {
 } from "@/components/admin/request-ownership-section";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { normalizeLifecycleStage } from "@/lib/request-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,12 @@ type RequestRow = {
   customer_access_enabled: boolean | null;
   lifecycle_stage: string | null;
   lifecycle_stage_updated_at: string | null;
+  completed_at: string | null;
+  completion_summary: string | null;
+  customer_completion_note: string | null;
+  reopened_at: string | null;
+  archived_at: string | null;
+  archived_from_stage: string | null;
   phone: string | null;
   whatsapp: string | null;
   wechat: string | null;
@@ -197,6 +205,16 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   const assignedByName = staffOptions.find((profile) => profile.id === requestRow.assigned_by);
   const checklistRows = (checklist ?? []) as AdminChecklistItem[];
   const fileRows = (files ?? []) as FileRow[];
+  const internalTaskRows = (internalTasks ?? []) as InternalTaskItem[];
+  const completionWarnings = [
+    checklistRows.some((item) => item.required && ["required", "missing"].includes(item.status)) ? "missing_required_documents" : null,
+    checklistRows.some((item) => item.required && ["incorrect", "expired"].includes(item.status)) ? "rejected_or_expired_documents" : null,
+    checklistRows.some((item) => ["uploaded", "under_review"].includes(item.status)) ? "documents_waiting_for_review" : null,
+    internalTaskRows.some((item) => !["completed", "cancelled"].includes(item.status)) ? "open_internal_tasks" : null,
+    requestRow.lifecycle_stage === "waiting_for_documents" ? "outstanding_customer_action" : null,
+    !fileRows.some((file) => file.is_final_deliverable && file.customer_visible && file.published_at && !file.deleted_at) ? "no_published_final_deliverables" : null,
+    requestRow.lifecycle_stage !== "final_review" ? "not_in_final_review" : null,
+  ].filter((item): item is string => Boolean(item));
   const nextAction = getAdminNextAction(requestRow.status, checklistRows);
   const customerActionItems = checklistRows
     .filter(
@@ -258,6 +276,17 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
 
             <CustomerLifecycleProgress requestId={requestRow.id} initialStage={requestRow.lifecycle_stage} updatedAt={requestRow.lifecycle_stage_updated_at} />
 
+            <RequestCompletionArchive
+              requestId={requestRow.id}
+              stage={normalizeLifecycleStage(requestRow.lifecycle_stage)}
+              completedAt={requestRow.completed_at}
+              archivedAt={requestRow.archived_at}
+              customerCompletionNote={requestRow.customer_completion_note}
+              completionSummary={requestRow.completion_summary}
+              archivedFromStage={requestRow.archived_from_stage}
+              initialWarnings={completionWarnings}
+            />
+
             <FinalDeliverablesSection
               requestId={requestRow.id}
               lifecycleStage={requestRow.lifecycle_stage}
@@ -276,7 +305,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
 
             <InternalTasksSection
               requestId={requestRow.id}
-              initialTasks={(internalTasks ?? []) as InternalTaskItem[]}
+              initialTasks={internalTaskRows}
               staff={staffOptions}
             />
 

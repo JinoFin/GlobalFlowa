@@ -8,6 +8,10 @@ Phase 6E extends the existing `request_files` model and private `request-documen
 
 Publishing a deliverable does not complete a request or change its lifecycle stage. Completed requests guide customers to download published files, or explain that final documents will be available soon. Archived requests retain access to already published deliverables. Draft, unpublished, deleted, customer-upload, and internal-document records are excluded from the final-documents view.
 
+Phase 6F adds atomic staff-only completion, reopening, archive, and restore actions. Completion requires a customer-facing note and recomputes checklist, review, task, customer-action, deliverable, and lifecycle warnings on the server; warnings require a second explicit confirmation and cannot be supplied by the browser. The optional completion summary is staff-only. Archive never deletes data, removes requests from active admin queues, preserves published final-document downloads, and makes customer uploads read-only until restoration or reopening. Manual lifecycle editing cannot enter or leave terminal states.
+
+Admin requests default to Active with explicit Completed, Archived, and All views; the workboard and operational alerts exclude completed and archived requests. The customer dashboard separates action-required, in-progress, recently completed, final-document, and archived requests. Portal queries select only customer-safe completion/archive fields and never select staff actor IDs, the internal completion summary, assignments, priorities, deadlines, tasks, or internal notes.
+
 ## Phase 1 scope
 
 - Homepage and premium B2B public website
@@ -613,7 +617,7 @@ These fields and tasks are internal. Customer portal queries continue to use exp
 - Phase 3C document review queue: no migration required.
 - Phase 4A–4E MVP completion sprint: no migration required; existing Phase 3 tables, columns, and RLS policies are reused.
 - Phase 5 operations management: `supabase/migrations/202607110001_phase5_operations_management.sql` — created locally and must be applied manually before the Phase 5 commits are pushed/deployed.
-- Phase 6 customer lifecycle: `supabase/migrations/202607110002_phase6_customer_lifecycle.sql` — one consolidated pending migration through Phase 6E; apply manually only after review and before deploying dependent Phase 6 code.
+- Phase 6 customer lifecycle: `supabase/migrations/202607110002_phase6_customer_lifecycle.sql` — one consolidated pending migration through Phase 6F; apply manually only after review and before deploying dependent Phase 6 code.
 
 Never run `supabase/schema.sql` against the existing live database. If a future change needs database work, create and review a live-safe migration, apply it manually before deploying dependent code, and record the result in the live QA checklist.
 

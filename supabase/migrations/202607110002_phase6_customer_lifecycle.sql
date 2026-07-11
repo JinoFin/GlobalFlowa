@@ -1,5 +1,5 @@
--- Phase 6A-6E: customer lifecycle, verified access, profiles, request linking,
--- lifecycle progress, and secure final customer deliverables.
+-- Phase 6A-6F: customer lifecycle, verified access, profiles, request linking,
+-- lifecycle progress, secure final deliverables, completion, and archiving.
 -- This migration is additive/idempotent and does not change existing admin or team roles.
 
 create table if not exists public.customer_account_activity (
@@ -22,6 +22,20 @@ alter table public.profiles add column if not exists timezone text;
 alter table public.service_requests add column if not exists lifecycle_stage text not null default 'received';
 alter table public.service_requests add column if not exists lifecycle_stage_updated_at timestamptz;
 alter table public.service_requests add column if not exists lifecycle_stage_updated_by uuid references public.profiles(id) on delete set null;
+alter table public.service_requests add column if not exists completed_at timestamptz;
+alter table public.service_requests add column if not exists completed_by uuid references public.profiles(id) on delete set null;
+alter table public.service_requests add column if not exists completion_summary text;
+alter table public.service_requests add column if not exists customer_completion_note text;
+alter table public.service_requests add column if not exists reopened_at timestamptz;
+alter table public.service_requests add column if not exists reopened_by uuid references public.profiles(id) on delete set null;
+alter table public.service_requests add column if not exists archived_at timestamptz;
+alter table public.service_requests add column if not exists archived_by uuid references public.profiles(id) on delete set null;
+alter table public.service_requests add column if not exists archived_from_stage text;
+alter table public.service_requests drop constraint if exists service_requests_archived_from_stage_check;
+alter table public.service_requests add constraint service_requests_archived_from_stage_check check (archived_from_stage is null or archived_from_stage in ('received','initial_review','waiting_for_documents','document_review','processing','external_processing','final_review','completed'));
+create index if not exists idx_service_requests_completed_at on public.service_requests(completed_at desc);
+create index if not exists idx_service_requests_archived_at on public.service_requests(archived_at desc);
+create index if not exists idx_service_requests_lifecycle_updated on public.service_requests(lifecycle_stage, lifecycle_stage_updated_at desc);
 
 alter table public.request_files add column if not exists title text;
 alter table public.request_files add column if not exists description text;
@@ -315,6 +329,7 @@ begin
     set customer_user_id = caller_id,
         updated_at = now()
     where requests.customer_user_id is null
+      and requests.lifecycle_stage <> 'archived'
       and lower(btrim(requests.customer_email)) = normalized_email
     returning requests.id
   ), logged as (
@@ -332,6 +347,58 @@ $$;
 
 revoke all on function public.claim_requests_for_current_customer() from public, anon;
 grant execute on function public.claim_requests_for_current_customer() to authenticated;
+
+create or replace function public.perform_request_lifecycle_action(
+  p_request_id uuid, p_action text, p_customer_completion_note text default null,
+  p_completion_summary text default null, p_target_stage text default null,
+  p_confirm_warnings boolean default false
+)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare actor_id uuid := auth.uid(); request_row public.service_requests%rowtype; warnings jsonb := '[]'::jsonb; target_stage text; changed_at timestamptz := now();
+begin
+  if actor_id is null or not exists (select 1 from public.profiles where id=actor_id and role in ('admin','team')) then raise exception 'staff authorization required' using errcode='42501'; end if;
+  select * into request_row from public.service_requests where id=p_request_id for update;
+  if not found then raise exception 'request not found' using errcode='P0002'; end if;
+  if p_action not in ('complete','reopen','archive','restore') then raise exception 'invalid lifecycle action' using errcode='22023'; end if;
+  if p_action='complete' then
+    if request_row.lifecycle_stage='archived' then raise exception 'archived request cannot be completed' using errcode='22023'; end if;
+    if request_row.lifecycle_stage='completed' then return jsonb_build_object('ok',true,'unchanged',true,'stage','completed'); end if;
+    if nullif(btrim(p_customer_completion_note),'') is null then raise exception 'customer completion note required' using errcode='22023'; end if;
+    if exists(select 1 from public.request_document_checklist where request_id=p_request_id and required=true and status in ('required','missing')) then warnings:=warnings||jsonb_build_array('missing_required_documents'); end if;
+    if exists(select 1 from public.request_document_checklist where request_id=p_request_id and required=true and status in ('incorrect','expired')) then warnings:=warnings||jsonb_build_array('rejected_or_expired_documents'); end if;
+    if exists(select 1 from public.request_document_checklist where request_id=p_request_id and status in ('uploaded','under_review')) then warnings:=warnings||jsonb_build_array('documents_waiting_for_review'); end if;
+    if exists(select 1 from public.internal_tasks where request_id=p_request_id and status not in ('completed','cancelled')) then warnings:=warnings||jsonb_build_array('open_internal_tasks'); end if;
+    if request_row.lifecycle_stage='waiting_for_documents' or exists(select 1 from public.customer_messages where request_id=p_request_id and customer_visible=true and cardinality(checklist_item_ids)>0) then warnings:=warnings||jsonb_build_array('outstanding_customer_action'); end if;
+    if not exists(select 1 from public.request_files where request_id=p_request_id and is_final_deliverable=true and customer_visible=true and published_at is not null and deleted_at is null) then warnings:=warnings||jsonb_build_array('no_published_final_deliverables'); end if;
+    if request_row.lifecycle_stage<>'final_review' then warnings:=warnings||jsonb_build_array('not_in_final_review'); end if;
+    if jsonb_array_length(warnings)>0 and not p_confirm_warnings then return jsonb_build_object('ok',false,'requires_confirmation',true,'warnings',warnings,'stage',request_row.lifecycle_stage); end if;
+    update public.service_requests set lifecycle_stage='completed',lifecycle_stage_updated_at=changed_at,lifecycle_stage_updated_by=actor_id,completed_at=changed_at,completed_by=actor_id,customer_completion_note=btrim(p_customer_completion_note),completion_summary=nullif(btrim(p_completion_summary),''),archived_at=null,archived_by=null,archived_from_stage=null,status='Completed',updated_at=changed_at where id=p_request_id;
+    insert into public.request_activity_log(request_id,actor_id,actor_type,action,details) values(p_request_id,actor_id,'admin','request_completed',jsonb_build_object('previous_stage',request_row.lifecycle_stage,'new_stage','completed','warnings_confirmed',p_confirm_warnings,'warning_categories',warnings,'has_customer_note',true,'changed_at',changed_at));
+    return jsonb_build_object('ok',true,'stage','completed','warnings',warnings);
+  elsif p_action='archive' then
+    if not p_confirm_warnings then raise exception 'archive confirmation required' using errcode='22023'; end if;
+    if request_row.lifecycle_stage='archived' then return jsonb_build_object('ok',true,'unchanged',true,'stage','archived'); end if;
+    update public.service_requests set archived_from_stage=request_row.lifecycle_stage,lifecycle_stage='archived',lifecycle_stage_updated_at=changed_at,lifecycle_stage_updated_by=actor_id,archived_at=changed_at,archived_by=actor_id,updated_at=changed_at where id=p_request_id;
+    insert into public.request_activity_log(request_id,actor_id,actor_type,action,details) values(p_request_id,actor_id,'admin','request_archived',jsonb_build_object('previous_stage',request_row.lifecycle_stage,'new_stage','archived','changed_at',changed_at));
+    return jsonb_build_object('ok',true,'stage','archived');
+  elsif p_action='reopen' then
+    if not(request_row.lifecycle_stage='completed' or(request_row.lifecycle_stage='archived' and request_row.completed_at is not null)) then raise exception 'request is not completed' using errcode='22023'; end if;
+    target_stage:=coalesce(p_target_stage,'processing');
+    if target_stage not in ('initial_review','waiting_for_documents','document_review','processing','external_processing','final_review') then raise exception 'invalid reopen target' using errcode='22023'; end if;
+    update public.service_requests set lifecycle_stage=target_stage,lifecycle_stage_updated_at=changed_at,lifecycle_stage_updated_by=actor_id,reopened_at=changed_at,reopened_by=actor_id,archived_at=null,archived_by=null,archived_from_stage=null,status='In Progress',updated_at=changed_at where id=p_request_id;
+    insert into public.request_activity_log(request_id,actor_id,actor_type,action,details) values(p_request_id,actor_id,'admin','request_reopened',jsonb_build_object('previous_stage',request_row.lifecycle_stage,'new_stage',target_stage,'changed_at',changed_at));
+    return jsonb_build_object('ok',true,'stage',target_stage);
+  else
+    if request_row.lifecycle_stage<>'archived' then raise exception 'request is not archived' using errcode='22023'; end if;
+    target_stage:=coalesce(p_target_stage,case when request_row.archived_from_stage in ('received','initial_review','waiting_for_documents','document_review','processing','external_processing','final_review','completed') then request_row.archived_from_stage when request_row.completed_at is not null then 'completed' else 'processing' end);
+    if target_stage not in ('received','initial_review','waiting_for_documents','document_review','processing','external_processing','final_review','completed') then raise exception 'invalid restore target' using errcode='22023'; end if;
+    update public.service_requests set lifecycle_stage=target_stage,lifecycle_stage_updated_at=changed_at,lifecycle_stage_updated_by=actor_id,archived_at=null,archived_by=null,archived_from_stage=null,status=case when target_stage='completed' then 'Completed' when request_row.status='Completed' then 'In Progress' else request_row.status end,updated_at=changed_at where id=p_request_id;
+    insert into public.request_activity_log(request_id,actor_id,actor_type,action,details) values(p_request_id,actor_id,'admin','request_restored',jsonb_build_object('previous_stage','archived','new_stage',target_stage,'restoration_stage',target_stage,'changed_at',changed_at));
+    return jsonb_build_object('ok',true,'stage',target_stage);
+  end if;
+end; $$;
+revoke all on function public.perform_request_lifecycle_action(uuid,text,text,text,text,boolean) from public,anon;
+grant execute on function public.perform_request_lifecycle_action(uuid,text,text,text,text,boolean) to authenticated;
 
 drop policy if exists "Customers can read own requests" on public.service_requests;
 create policy "Customers can read own requests" on public.service_requests for select to authenticated

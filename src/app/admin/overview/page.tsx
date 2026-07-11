@@ -8,6 +8,7 @@ import {
 } from "@/components/admin/operational-alerts";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { daysAgoIso } from "@/lib/server-time";
 
 export const metadata = {
   title: "Admin Operations Overview",
@@ -51,6 +52,9 @@ type OperationsRequestRow = {
   assigned_to: string | null;
   due_at: string | null;
   updated_at: string;
+  lifecycle_stage: string;
+  completed_at: string | null;
+  archived_at: string | null;
 };
 
 type OperationsTaskRow = {
@@ -64,6 +68,8 @@ type OperationsTaskRow = {
 };
 
 type OperationsChecklistRow = { request_id: string; status: string };
+type LifecycleIdRow = { id: string };
+type DeliverableRequestRow = { request_id: string };
 
 export default async function AdminOverviewPage() {
   let supabase;
@@ -85,6 +91,7 @@ export default async function AdminOverviewPage() {
     redirect("/portal/requests");
   }
 
+  const recentCutoff = daysAgoIso(30);
   const [
     totalRequests,
     newRequests,
@@ -92,6 +99,13 @@ export default async function AdminOverviewPage() {
     waitingRequests,
     documentsNeedingReview,
     completedRequests,
+    activeLifecycleRequests,
+    processingRequests,
+    finalReviewRequests,
+    recentlyCompletedRequests,
+    archivedRequests,
+    completedLifecycleRows,
+    publishedDeliverableRows,
     messageResult,
     uploadResult,
     activityResult,
@@ -100,17 +114,25 @@ export default async function AdminOverviewPage() {
     operationsChecklistResult,
   ] = await Promise.all([
     supabase.from("service_requests").select("id", { count: "exact", head: true }),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "New"),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "In Review"),
+    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "New").not("lifecycle_stage", "in", "(completed,archived)"),
+    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "In Review").not("lifecycle_stage", "in", "(completed,archived)"),
     supabase
       .from("service_requests")
       .select("id", { count: "exact", head: true })
-      .eq("status", "Waiting for Customer"),
+      .eq("lifecycle_stage", "waiting_for_documents"),
     supabase
       .from("request_document_checklist")
-      .select("id", { count: "exact", head: true })
-      .in("status", ["uploaded", "under_review"]),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "Completed"),
+      .select("id, service_requests!inner(lifecycle_stage)", { count: "exact", head: true })
+      .in("status", ["uploaded", "under_review"])
+      .not("service_requests.lifecycle_stage", "in", "(completed,archived)"),
+    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "completed"),
+    supabase.from("service_requests").select("id", { count: "exact", head: true }).not("lifecycle_stage", "in", "(completed,archived)"),
+    supabase.from("service_requests").select("id", { count: "exact", head: true }).in("lifecycle_stage", ["processing", "external_processing"]),
+    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "final_review"),
+    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "completed").gte("completed_at", recentCutoff),
+    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "archived"),
+    supabase.from("service_requests").select("id").eq("lifecycle_stage", "completed"),
+    supabase.from("request_files").select("request_id").eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
     supabase
       .from("customer_messages")
       .select("id, request_id, subject, created_at, email_status")
@@ -129,7 +151,7 @@ export default async function AdminOverviewPage() {
       .limit(8),
     supabase
       .from("service_requests")
-      .select("id, company_name, status, priority, assigned_to, due_at, updated_at")
+      .select("id, company_name, status, priority, assigned_to, due_at, updated_at, lifecycle_stage, completed_at, archived_at")
       .order("created_at", { ascending: false })
       .limit(250),
     supabase
@@ -149,6 +171,13 @@ export default async function AdminOverviewPage() {
     waitingRequests,
     documentsNeedingReview,
     completedRequests,
+    activeLifecycleRequests,
+    processingRequests,
+    finalReviewRequests,
+    recentlyCompletedRequests,
+    archivedRequests,
+    completedLifecycleRows,
+    publishedDeliverableRows,
     messageResult,
     uploadResult,
     activityResult,
@@ -165,7 +194,7 @@ export default async function AdminOverviewPage() {
   const uploads = (uploadResult.data ?? []) as RequestFileRow[];
   const activities = (activityResult.data ?? []) as ActivityRow[];
   const operationsChecklist = (operationsChecklistResult.data ?? []) as OperationsChecklistRow[];
-  const operationalRequests = ((operationsRequestResult.data ?? []) as OperationsRequestRow[]).map(
+  const operationalRequests = ((operationsRequestResult.data ?? []) as OperationsRequestRow[]).filter((request) => !["completed", "archived"].includes(request.lifecycle_stage)).map(
     (request): OperationalRequest => ({
       id: request.id,
       companyName: request.company_name,
@@ -177,7 +206,8 @@ export default async function AdminOverviewPage() {
       documentsWaiting: operationsChecklist.filter((item) => item.request_id === request.id).length,
     }),
   );
-  const operationalTasks = ((operationsTaskResult.data ?? []) as OperationsTaskRow[]).map(
+  const activeOperationalIds = new Set(operationalRequests.map((request) => request.id));
+  const operationalTasks = ((operationsTaskResult.data ?? []) as OperationsTaskRow[]).filter((task) => activeOperationalIds.has(task.request_id)).map(
     (task): OperationalTask => ({
       id: task.id,
       requestId: task.request_id,
@@ -195,6 +225,8 @@ export default async function AdminOverviewPage() {
       ...activities.map((item) => item.request_id),
     ]),
   ];
+  const publishedRequestIds = new Set(((publishedDeliverableRows.data ?? []) as DeliverableRequestRow[]).map((row) => row.request_id));
+  const completedMissingDeliverables = ((completedLifecycleRows.data ?? []) as LifecycleIdRow[]).filter((row) => !publishedRequestIds.has(row.id)).length;
   let requestNames = new Map<string, string>();
 
   if (requestIds.length > 0) {
@@ -213,20 +245,26 @@ export default async function AdminOverviewPage() {
   }
 
   const metrics = [
-    { label: "Total requests", value: totalRequests.count ?? 0, href: "/admin/requests" },
+    { label: "Total requests", value: totalRequests.count ?? 0, href: "/admin/requests?view=all" },
+    { label: "Active requests", value: activeLifecycleRequests.count ?? 0, href: "/admin/requests?view=active" },
     { label: "New requests", value: newRequests.count ?? 0, href: "/admin/requests?status=New" },
     { label: "In review", value: inReviewRequests.count ?? 0, href: "/admin/requests?status=In+Review" },
     {
       label: "Waiting for customer",
       value: waitingRequests.count ?? 0,
-      href: "/admin/requests?status=Waiting+for+Customer",
+      href: "/admin/requests?view=active&stage=waiting_for_documents",
     },
     {
       label: "Documents needing review",
       value: documentsNeedingReview.count ?? 0,
       href: "/admin/document-review",
     },
-    { label: "Completed", value: completedRequests.count ?? 0, href: "/admin/requests?status=Completed" },
+    { label: "Processing", value: processingRequests.count ?? 0, href: "/admin/requests?view=active" },
+    { label: "Final review / ready", value: finalReviewRequests.count ?? 0, href: "/admin/requests?view=active&stage=final_review" },
+    { label: "Completed recently", value: recentlyCompletedRequests.count ?? 0, href: "/admin/requests?view=completed" },
+    { label: "Archived", value: archivedRequests.count ?? 0, href: "/admin/requests?view=archived" },
+    { label: "Completed missing final documents", value: completedMissingDeliverables, href: "/admin/requests?view=completed" },
+    { label: "Completed total", value: completedRequests.count ?? 0, href: "/admin/requests?view=completed" },
   ];
 
   return (

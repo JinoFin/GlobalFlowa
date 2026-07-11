@@ -95,17 +95,18 @@ export function RequestActions({
   return (
     <div className="rounded-md border border-navy-100 bg-white p-5 shadow-sm">
       <h2 className="text-xl font-semibold text-navy-950">Admin actions</h2>
+      <p className="mt-2 text-sm text-navy-650">Internal operational status and notes. Use the separate completion and archive controls for terminal customer lifecycle changes.</p>
       {message ? <p className="mt-3 text-sm text-teal-700">{message}</p> : null}
       <div className="mt-5 space-y-4">
         <label className="block">
-          <span className="text-sm font-semibold text-navy-950">Status</span>
+          <span className="text-sm font-semibold text-navy-950">Internal operational status</span>
           <select
             value={status}
             onChange={(event) => setStatus(event.target.value)}
             className="mt-2 w-full rounded-md border border-navy-200 px-3 py-2"
           >
             {statuses.map((item) => (
-              <option key={item} value={item}>{item}</option>
+              <option key={item} value={item} disabled={item === "Completed" && currentStatus !== "Completed"}>{item}</option>
             ))}
           </select>
         </label>

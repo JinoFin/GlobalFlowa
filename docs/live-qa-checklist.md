@@ -190,6 +190,35 @@ The `request-documents` bucket must remain private. Final deliverables reuse `re
 21. Archived requests retain published final documents as documented.
 22. Existing signup, profiles, claiming, lifecycle, messaging, assignments, and tasks still work.
 
+## Phase 6 Completion, Archive, and Dashboard Acceptance
+
+Completion, reopening, archive, and restore use the protected lifecycle-action API and its atomic database function. The function derives the staff actor from `auth.uid()`, checks the profile role, locks the request, recomputes warnings, changes state, and records activity in one transaction. Archived and completed requests reject customer uploads server-side. Archive retains every request record and published final document.
+
+1. Admin opens an active request and submits completion.
+2. Confirm completion warnings are calculated on the server.
+3. Confirm missing warning approval returns HTTP 409 without completing.
+4. Confirm the required customer completion note is enforced.
+5. Admin explicitly confirms warnings and the request becomes completed.
+6. Customer sees the completion banner, date, and customer note.
+7. Confirm the internal completion summary and staff actor fields are absent from portal data.
+8. Published final documents remain securely downloadable.
+9. Draft, unpublished, internal, and deleted deliverables remain unavailable.
+10. Completed requests reject customer uploads.
+11. Admin reopens to a validated active stage and the customer sees active progress again.
+12. Allowed customer uploads return only after reopening.
+13. Admin archives an active request with explicit confirmation.
+14. Archived request leaves active request/workboard/overview workload queues.
+15. Customer still sees the archived request as read-only.
+16. Customer can download its published final documents but cannot upload.
+17. Admin restores the archived request to its recorded previous stage.
+18. Invalid reopen or restore target stages are rejected.
+19. Repeated complete or archive actions do not create duplicate activity.
+20. Customer A cannot see Customer B's completed or archived request.
+21. Customer and unauthenticated callers cannot execute lifecycle actions.
+22. Completed, archived, ready-for-completion, and missing-deliverable metrics are accurate.
+23. No request, message, task, checklist item, file metadata, or activity is deleted during archive.
+24. Existing signup, profile, claim, messaging, review, assignment, task, lifecycle, and deliverable workflows still work.
+
 ## Data Workflow
 
 - Confirm `service_requests` contains the submitted request.

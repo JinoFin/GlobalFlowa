@@ -20,6 +20,9 @@ type RequestRow = {
   main_service: string | null;
   lifecycle_stage: string;
   lifecycle_stage_updated_at: string | null;
+  completed_at: string | null;
+  customer_completion_note: string | null;
+  archived_at: string | null;
 };
 
 type ChecklistRow = {
@@ -45,7 +48,7 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
 
   const { data: requests, error } = await supabase
     .from("service_requests")
-    .select("id, created_at, company_name, main_service, lifecycle_stage, lifecycle_stage_updated_at")
+    .select("id, created_at, company_name, main_service, lifecycle_stage, lifecycle_stage_updated_at, completed_at, customer_completion_note, archived_at")
     .eq("customer_access_enabled", true)
     .eq("customer_user_id", user.id)
     .order("created_at", { ascending: false });
@@ -121,7 +124,11 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
                   <p className="mt-1 text-xs text-navy-500">{formatDate(request.created_at)}</p>
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-navy-100"><div className="h-full rounded-full bg-teal-600" style={{ width: `${lifecycleProgress(stage)}%` }} /></div>
                   <p className="mt-2 text-sm font-semibold text-navy-700">{nextAction.label}</p>
+                  {nextAction.tone === "action" ? <p className="mt-2 inline-flex rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">Action required</p> : null}
+                  {stage === "completed" ? <p className="mt-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">Completed{request.completed_at ? ` · ${formatDate(request.completed_at)}` : ""}</p> : null}
+                  {stage === "archived" ? <p className="mt-2 inline-flex rounded-full bg-navy-100 px-2 py-1 text-xs font-semibold text-navy-700">Archived · Read only</p> : null}
                   {hasPublishedDeliverables ? <p className="mt-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">Final documents available</p> : null}
+                  {stage === "completed" && request.customer_completion_note ? <p className="mt-2 line-clamp-2 text-xs text-navy-650">{request.customer_completion_note}</p> : null}
                   {request.lifecycle_stage_updated_at ? <p className="mt-1 text-xs text-navy-500">Progress updated {formatDate(request.lifecycle_stage_updated_at)}</p> : null}
                   <div className="mt-5">
                     <div className="h-2 overflow-hidden rounded-full bg-navy-100">

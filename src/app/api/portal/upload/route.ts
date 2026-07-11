@@ -87,6 +87,9 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: "Request not found or access denied." }, { status: 404 });
   }
+  if (["completed", "archived"].includes((requestRow as RequestRow).lifecycle_stage)) {
+    return NextResponse.json({ error: "This request is no longer accepting uploads." }, { status: 409 });
+  }
 
   const { data: checklistRow, error: checklistError } = await serviceClient
     .from("request_document_checklist")

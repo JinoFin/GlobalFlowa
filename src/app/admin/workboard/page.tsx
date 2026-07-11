@@ -20,6 +20,7 @@ type RequestRow = {
   assigned_to: string | null;
   priority: string;
   due_at: string | null;
+  lifecycle_stage: string;
 };
 
 type TaskRow = { request_id: string; status: string; assigned_to: string | null };
@@ -42,7 +43,8 @@ export default async function AdminWorkboardPage() {
   const [requestResult, taskResult, checklistResult, profileResult] = await Promise.all([
     supabase
       .from("service_requests")
-      .select("id, created_at, company_name, email, customer_email, main_service, status, assigned_to, priority, due_at")
+      .select("id, created_at, company_name, email, customer_email, main_service, status, assigned_to, priority, due_at, lifecycle_stage")
+      .not("lifecycle_stage", "in", "(completed,archived)")
       .order("created_at", { ascending: false })
       .limit(250),
     supabase.from("internal_tasks").select("request_id, status, assigned_to"),
@@ -107,6 +109,7 @@ function WorkboardShell({ children, error, showLogout = true }: { children?: Rea
             <p className="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Admin operations</p>
             <h1 className="mt-2 text-3xl font-semibold text-navy-950">Team Workboard</h1>
             <p className="mt-3 max-w-3xl text-navy-650">Assign requests, prioritize deadlines, find blocked work, and focus each team member’s daily queue.</p>
+            <div className="mt-3 flex gap-4 text-sm font-semibold text-teal-700"><Link href="/admin/requests?view=completed">Completed requests</Link><Link href="/admin/requests?view=archived">Archived requests</Link></div>
           </div>
           {showLogout ? <LogoutButton /> : null}
         </div>
