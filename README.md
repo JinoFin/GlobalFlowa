@@ -588,12 +588,25 @@ The MVP is ready for production acceptance when the following end-to-end paths h
 
 The complete manual checklist, including negative authorization tests and known limitations, is in [docs/live-qa-checklist.md](docs/live-qa-checklist.md#production-mvp-acceptance-checklist).
 
+## Phase 5 operations management
+
+Phase 5 adds an internal daily-operations layer for authenticated `admin` and `team` users:
+
+- Request ownership, priority, assignment audit, due dates, and overdue indicators on admin request detail.
+- Internal request tasks with assignee, priority, due date, open/in-progress/blocked/completed/cancelled states, completion, reopening, and activity history.
+- `/admin/workboard` views for My Work, unassigned, overdue, due soon, urgent/high priority, waiting for customer, assigned tasks, and blocked tasks.
+- Workboard search, assignee/priority/status/deadline filters, sorting, and quick request/task/document-review actions.
+- `/admin/overview` metrics and alerts for unassigned/overdue/urgent work, internal tasks, blocked tasks, due dates, uploads awaiting review, and older customer waits.
+
+These fields and tasks are internal. Customer portal queries continue to use explicit customer-safe column lists, customer APIs cannot update operations fields, and `internal_tasks` has no customer RLS policy or grant.
+
 ## Supabase live migration status
 
 - Phase 3A customer portal hardening: `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` — confirmed applied live.
 - Phase 3B customer messages: `supabase/migrations/202607100002_phase3b_customer_messages.sql` — confirmed applied live.
 - Phase 3C document review queue: no migration required.
 - Phase 4A–4E MVP completion sprint: no migration required; existing Phase 3 tables, columns, and RLS policies are reused.
+- Phase 5 operations management: `supabase/migrations/202607110001_phase5_operations_management.sql` — created locally and must be applied manually before the Phase 5 commits are pushed/deployed.
 
 Never run `supabase/schema.sql` against the existing live database. If a future change needs database work, create and review a live-safe migration, apply it manually before deploying dependent code, and record the result in the live QA checklist.
 
@@ -601,10 +614,10 @@ Never run `supabase/schema.sql` against the existing live database. If a future 
 
 1. Pull the latest `main` with a fast-forward-only pull and confirm the worktree is clean.
 2. Run `npm run lint`, `npm run build`, `git diff --check`, and `npm audit --audit-level=moderate` when registry access is available.
-3. Review `supabase/migrations`. If a new migration exists, back up/confirm the target project, apply only that migration manually, and verify its schema/RLS result. Never run `schema.sql` on live.
+3. Apply only `supabase/migrations/202607110001_phase5_operations_management.sql` manually to the existing live project before pushing Phase 5. Verify the new request columns, normalized priority constraint, indexes, `internal_tasks`, grants, and admin/team RLS. Never run `schema.sql` on live.
 4. Push the reviewed commits to GitHub without force pushing.
 5. Wait for the matching Vercel deployment to finish and confirm the deployment uses the expected commit and environment.
-6. Smoke test `/`, `/request`, `/admin/login`, `/admin/overview`, `/admin/requests`, `/admin/document-review`, `/portal/login`, and `/portal/requests`.
+6. Smoke test `/`, `/request`, `/admin/login`, `/admin/overview`, `/admin/requests`, `/admin/document-review`, `/admin/workboard`, `/portal/login`, and `/portal/requests`.
 7. Run the production acceptance workflow in [docs/live-qa-checklist.md](docs/live-qa-checklist.md#manual-live-acceptance-test).
 8. If a release fails, stop new acceptance activity, roll Vercel back to the last accepted deployment, and assess database compatibility before reverting code. Do not reverse a database migration until a reviewed down-migration/data plan exists.
 
@@ -631,5 +644,7 @@ curl -I http://localhost:3011/portal
 curl -I http://localhost:3011/portal/requests
 curl -I http://localhost:3011/admin/login
 curl -I http://localhost:3011/admin/requests
+curl -I http://localhost:3011/admin/overview
+curl -I http://localhost:3011/admin/workboard
 curl -I http://localhost:3011/admin/services
 ```

@@ -119,6 +119,18 @@ Security note:
 - Add a customer-visible admin note and confirm it appears in the customer portal.
 - Export CSV from `/api/admin/export`.
 
+## Phase 5 Operations Workflow
+
+- Open an admin request detail and use **Ownership and Deadline** to assign an admin/team profile, select low/normal/high/urgent priority, and set a due date.
+- Confirm assignment date/author and overdue state appear only in admin operations UI.
+- Create an internal task with title, description, assignee, priority, and due date.
+- Move tasks through open, in progress, blocked, completed, reopened, and cancelled workflows.
+- Confirm the activity timeline records request assignment/reassignment, priority/deadline changes, and every task lifecycle action.
+- Open `/admin/workboard` and test All Work, My Work, Unassigned, Overdue, Due Soon, Urgent/High, Waiting for Customer, Tasks Assigned to Me, and Blocked Tasks.
+- Search by company, customer email, service, and staff member. Test assignee, priority, status, overdue, due-this-week, and unassigned filters plus priority/due/newest/oldest sorting.
+- Use quick actions to open a request, change assignment/priority/due date, open document review, and jump to internal task creation.
+- Confirm `/admin/overview` shows the Phase 5 workload metrics and operational alert sections.
+
 ## Data Workflow
 
 - Confirm `service_requests` contains the submitted request.
@@ -186,6 +198,12 @@ Record the tested deployment URL, Git commit, tester, date, and result before ma
 - [ ] The next recommended action matches the current checklist/request state.
 - [ ] The request timeline shows submission, admin updates, customer messaging, upload/replacement, and accept/reject activity where applicable.
 - [ ] Internal notes are visible to admin/team users and do not appear in the customer portal unless explicitly marked customer-visible.
+- [ ] Request ownership, priority, due date, assignment timestamp, and assigning user save and remain visible after refresh.
+- [ ] `/admin/workboard` shows the same ownership/deadline values and its views, filters, search, sorting, and quick actions work.
+- [ ] Internal tasks can be created, assigned, updated, blocked, completed, reopened, and cancelled.
+- [ ] My Work shows requests assigned to the current user and Tasks Assigned to Me shows requests with their open assigned tasks.
+- [ ] Overdue and due-soon badges/metrics use the configured operational due dates.
+- [ ] Overview metrics and alerts agree with workboard/request-detail data.
 
 ### Customer portal, messages, and uploads
 
@@ -224,13 +242,17 @@ Record the tested deployment URL, Git commit, tester, date, and result before ma
 - [ ] Admin/team policies use the existing safe helper functions and profile RLS remains non-recursive.
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` and `EMAIL_PROVIDER_API_KEY` exist only in server-side deployment configuration.
 - [ ] The `request-documents` bucket is private and public object URLs are not used.
+- [ ] `internal_tasks` has RLS enabled, explicit authenticated grants, one admin/team management policy using `is_admin_or_team()`, and no customer policy.
+- [ ] Customer users cannot read or mutate internal tasks or call `/api/admin/internal-task` and `/api/admin/request-assignment`.
+- [ ] Customer request queries do not select `assigned_to`, `assigned_by`, `assigned_at`, `priority`, or `due_at`.
+- [ ] Profile staff-list access uses the non-recursive SECURITY DEFINER helper and only exposes admin/team profiles to authorized staff.
 
 ### Vercel deployment
 
 - [ ] Production reports a successful build for the intended Git commit.
 - [ ] Production environment variables are present with correct Production scope; Preview values do not point at production unless intentionally approved.
 - [ ] Supabase Auth redirect/site URLs include the production domain.
-- [ ] Route smoke checks pass for `/`, `/request`, `/admin/login`, `/admin/overview`, `/admin/requests`, `/admin/document-review`, `/portal/login`, and `/portal/requests`.
+- [ ] Route smoke checks pass for `/`, `/request`, `/admin/login`, `/admin/overview`, `/admin/requests`, `/admin/document-review`, `/admin/workboard`, `/portal/login`, and `/portal/requests`.
 - [ ] Vercel function logs show no unexpected auth, database, storage, upload, or email errors during acceptance.
 
 ### Known MVP limitations
@@ -254,11 +276,27 @@ Record the tested deployment URL, Git commit, tester, date, and result before ma
 9. Accept the replacement. Confirm the portal shows `accepted` and no further upload is requested.
 10. Run the cross-customer, customer-to-admin, private-file, and secret-exposure negative tests before signing off.
 
+## Phase 5 Live Acceptance Checklist
+
+1. Log in as an admin/team user and assign a request to a staff profile.
+2. Refresh request detail and confirm the assignment, assignment timestamp, and assigning user persist.
+3. Open `/admin/workboard` and confirm the same assignment appears.
+4. Change the request priority and verify the workboard ordering/filter plus `request_priority_changed` activity.
+5. Set a due date and verify due-soon or overdue badges using a safe test timestamp.
+6. Create an internal task for the request.
+7. Assign the task to a team user and confirm `internal_task_assigned` activity.
+8. Log in as that team user and confirm My Work / Tasks Assigned to Me includes the request.
+9. Complete the task, then reopen it, confirming status and activity after each refresh.
+10. Block and un-block/update a task and confirm the Blocked Tasks view and overview alert.
+11. Confirm assignment, priority, due-date, and task actions appear in the request activity timeline.
+12. Log in as a customer and confirm the portal HTML/data contains no staff names, assignments, internal deadlines, priorities, or tasks; direct calls to both Phase 5 admin APIs return forbidden/unauthorized.
+13. Re-test customer messaging, upload/replacement, protected downloads, document review acceptance/rejection, and existing admin checklist updates.
+
 ## Deployment Runbook
 
 1. **Pull latest main:** confirm a clean worktree, fetch origin, and run `git pull --ff-only origin main`.
 2. **Verify locally:** run `npm run lint`, `npm run build`, `git diff --check`, and `npm audit --audit-level=moderate` when registry access is available.
-3. **Apply migration if any:** inspect new files under `supabase/migrations`. Apply only the reviewed live-safe migration manually and verify columns, constraints, indexes, grants, and RLS. Never run `supabase/schema.sql` on the existing live project.
+3. **Apply the Phase 5 migration:** before pushing/deploying dependent code, manually apply only `supabase/migrations/202607110001_phase5_operations_management.sql`. Verify request operations columns/constraints/indexes, the `internal_tasks` table/indexes, authenticated grants, the staff-read policy, and admin/team-only task RLS. Never run `supabase/schema.sql` on the existing live project.
 4. **Push:** push the reviewed commits normally. Never force push and never commit environment files or secrets.
 5. **Wait for Vercel:** confirm the deployment succeeds and is tied to the expected commit.
 6. **Smoke test:** check the public, admin, overview, document-review, login, and portal routes listed above.
@@ -271,4 +309,5 @@ Record the tested deployment URL, Git commit, tester, date, and result before ma
 - Applied live: `202607100002_phase3b_customer_messages.sql` — Phase 3B structured customer messages.
 - Phase 3C: no migration required.
 - Phase 4A–4E MVP completion sprint: no migration required.
+- Pending manual application before Phase 5 deploy: `202607110001_phase5_operations_management.sql` — ownership/deadlines, priority hardening, staff-read policy, and admin/team-only internal tasks.
 - Permanent safety rule: never run `supabase/schema.sql` on the existing live Supabase project.
