@@ -55,3 +55,35 @@ create policy "Admin and team can read staff profiles"
 on public.profiles for select
 to authenticated
 using (public.is_admin_or_team() and role in ('admin', 'team'));
+
+create table if not exists public.internal_tasks (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  request_id uuid not null references public.service_requests(id) on delete cascade,
+  title text not null,
+  description text,
+  status text not null default 'open' check (status in ('open', 'in_progress', 'blocked', 'completed', 'cancelled')),
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
+  assigned_to uuid references public.profiles(id) on delete set null,
+  created_by uuid references public.profiles(id) on delete set null,
+  due_at timestamptz,
+  completed_at timestamptz
+);
+
+create index if not exists idx_internal_tasks_request_id on public.internal_tasks(request_id);
+create index if not exists idx_internal_tasks_assigned_to on public.internal_tasks(assigned_to);
+create index if not exists idx_internal_tasks_status on public.internal_tasks(status);
+create index if not exists idx_internal_tasks_due_at on public.internal_tasks(due_at);
+
+alter table public.internal_tasks enable row level security;
+
+revoke all on public.internal_tasks from anon, authenticated;
+grant select, insert, update, delete on public.internal_tasks to authenticated;
+
+drop policy if exists "Admins can manage internal tasks" on public.internal_tasks;
+create policy "Admins can manage internal tasks"
+on public.internal_tasks for all
+to authenticated
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());

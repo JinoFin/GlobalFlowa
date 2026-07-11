@@ -11,6 +11,10 @@ import {
 } from "@/components/admin/customer-message-section";
 import { RequestActions } from "@/components/admin/request-actions";
 import {
+  InternalTasksSection,
+  type InternalTaskItem,
+} from "@/components/admin/internal-tasks-section";
+import {
   RequestOwnershipSection,
   type StaffProfileOption,
 } from "@/components/admin/request-ownership-section";
@@ -122,7 +126,7 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
     redirect("/portal/requests");
   }
 
-  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }, { data: customerMessages }, { data: staffProfiles }] =
+  const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }, { data: customerMessages }, { data: staffProfiles }, { data: internalTasks }] =
     await Promise.all([
       supabase.from("service_requests").select("*").eq("id", id).single(),
       supabase.from("request_services").select("service_name, service_slug").eq("request_id", id),
@@ -141,6 +145,11 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
         .select("id, full_name, email, role")
         .in("role", ["admin", "team"])
         .order("full_name"),
+      supabase
+        .from("internal_tasks")
+        .select("id, title, description, status, priority, assigned_to, due_at, completed_at, created_at")
+        .eq("request_id", id)
+        .order("created_at", { ascending: false }),
     ]);
 
   if (!request) {
@@ -223,6 +232,12 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
               initialDueAt={requestRow.due_at}
               assignedAt={requestRow.assigned_at}
               assignedByName={assignedByName?.fullName || assignedByName?.email || null}
+              staff={staffOptions}
+            />
+
+            <InternalTasksSection
+              requestId={requestRow.id}
+              initialTasks={(internalTasks ?? []) as InternalTaskItem[]}
               staff={staffOptions}
             />
 

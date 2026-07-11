@@ -194,6 +194,21 @@ create table if not exists public.request_activity_log (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.internal_tasks (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  request_id uuid not null references public.service_requests(id) on delete cascade,
+  title text not null,
+  description text,
+  status text not null default 'open' check (status in ('open', 'in_progress', 'blocked', 'completed', 'cancelled')),
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
+  assigned_to uuid references public.profiles(id) on delete set null,
+  created_by uuid references public.profiles(id) on delete set null,
+  due_at timestamptz,
+  completed_at timestamptz
+);
+
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'team', 'customer'));
 alter table public.profiles alter column role set default 'customer';
@@ -280,6 +295,10 @@ create index if not exists idx_request_document_checklist_status on public.reque
 create index if not exists idx_customer_messages_request_id on public.customer_messages(request_id);
 create index if not exists idx_customer_messages_sent_to_email on public.customer_messages(sent_to_email);
 create index if not exists idx_customer_messages_created_at on public.customer_messages(created_at);
+create index if not exists idx_internal_tasks_request_id on public.internal_tasks(request_id);
+create index if not exists idx_internal_tasks_assigned_to on public.internal_tasks(assigned_to);
+create index if not exists idx_internal_tasks_status on public.internal_tasks(status);
+create index if not exists idx_internal_tasks_due_at on public.internal_tasks(due_at);
 
 alter table public.profiles enable row level security;
 alter table public.services enable row level security;
@@ -295,6 +314,7 @@ alter table public.recommendation_answers enable row level security;
 alter table public.admin_notes enable row level security;
 alter table public.customer_messages enable row level security;
 alter table public.request_activity_log enable row level security;
+alter table public.internal_tasks enable row level security;
 
 grant select on public.services to anon, authenticated;
 grant select on public.service_questions to anon, authenticated;
@@ -311,6 +331,8 @@ grant select, insert, update, delete on public.admin_notes to authenticated;
 revoke all on public.customer_messages from anon, authenticated;
 grant select, insert, update on public.customer_messages to authenticated;
 grant select, insert, update, delete on public.request_activity_log to authenticated;
+revoke all on public.internal_tasks from anon, authenticated;
+grant select, insert, update, delete on public.internal_tasks to authenticated;
 
 create or replace function public.is_admin()
 returns boolean
@@ -367,6 +389,7 @@ drop policy if exists "Customers can read own visible messages" on public.custom
 drop policy if exists "Admins can manage activity" on public.request_activity_log;
 drop policy if exists "Admins can read request documents" on storage.objects;
 drop policy if exists "Admin and team can read staff profiles" on public.profiles;
+drop policy if exists "Admins can manage internal tasks" on public.internal_tasks;
 
 create policy "Public can read active services"
 on public.services for select
@@ -603,6 +626,12 @@ using (
 
 create policy "Admins can manage activity"
 on public.request_activity_log for all
+to authenticated
+using (public.is_admin_or_team())
+with check (public.is_admin_or_team());
+
+create policy "Admins can manage internal tasks"
+on public.internal_tasks for all
 to authenticated
 using (public.is_admin_or_team())
 with check (public.is_admin_or_team());
