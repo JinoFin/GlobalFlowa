@@ -5,6 +5,7 @@ import { Workboard, type WorkboardRow } from "@/components/admin/workboard";
 import type { StaffProfileOption } from "@/components/admin/request-ownership-section";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Admin Team Workboard" };
 export const dynamic = "force-dynamic";
@@ -39,17 +40,18 @@ export default async function AdminWorkboardPage() {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/admin/login");
   if (!(await isAdminUser(supabase, userData.user))) redirect("/portal/requests");
+  const dataClient = getSupabaseServiceClient();
 
   const [requestResult, taskResult, checklistResult, profileResult] = await Promise.all([
-    supabase
+    dataClient
       .from("service_requests")
       .select("id, created_at, company_name, email, customer_email, main_service, status, assigned_to, priority, due_at, lifecycle_stage")
       .not("lifecycle_stage", "in", "(completed,archived)")
       .order("created_at", { ascending: false })
       .limit(250),
-    supabase.from("internal_tasks").select("request_id, status, assigned_to"),
-    supabase.from("request_document_checklist").select("request_id, status, required"),
-    supabase.from("profiles").select("id, full_name, email, role").in("role", ["admin", "team"]).order("full_name"),
+    dataClient.from("internal_tasks").select("request_id, status, assigned_to"),
+    dataClient.from("request_document_checklist").select("request_id, status, required"),
+    dataClient.from("profiles").select("id, full_name, email, role").in("role", ["admin", "team"]).order("full_name"),
   ]);
 
   const loadError = requestResult.error ?? taskResult.error ?? checklistResult.error ?? profileResult.error;

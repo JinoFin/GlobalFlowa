@@ -3,6 +3,7 @@ import { z } from "zod";
 import { sendCustomerMessageEmail } from "@/lib/email/send";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
   if (!(await isAdminUser(supabase, user))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
+  const dataClient = getSupabaseServiceClient();
 
   let rawPayload: unknown;
   try {
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
   const payload = parsed.data;
   const checklistItemIds = [...new Set(payload.checklist_item_ids)];
 
-  const { data: requestData, error: requestError } = await supabase
+  const { data: requestData, error: requestError } = await dataClient
     .from("service_requests")
     .select("id, company_name, email, customer_email, status, lifecycle_stage")
     .eq("id", payload.request_id)
@@ -96,7 +98,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "The request does not have a valid customer email." }, { status: 422 });
   }
 
-  const { data: checklistData, error: checklistError } = await supabase
+  const { data: checklistData, error: checklistError } = await dataClient
     .from("request_document_checklist")
     .select("id, title, status, customer_visible")
     .eq("request_id", payload.request_id)
@@ -129,7 +131,7 @@ export async function POST(request: Request) {
     .map((id) => checklistById.get(id))
     .filter((item): item is ChecklistRow => Boolean(item));
 
-  const { data: customerMessage, error: insertError } = await supabase
+  const { data: customerMessage, error: insertError } = await dataClient
     .from("customer_messages")
     .insert({
       request_id: payload.request_id,
@@ -180,7 +182,7 @@ export async function POST(request: Request) {
 
   const now = new Date().toISOString();
   const postSaveFailures: string[] = [];
-  const { error: messageUpdateError } = await supabase
+  const { error: messageUpdateError } = await dataClient
     .from("customer_messages")
     .update({
       email_status: emailStatus,
@@ -198,7 +200,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { error: activityError } = await supabase.from("request_activity_log").insert({
+  const { error: activityError } = await dataClient.from("request_activity_log").insert({
     request_id: payload.request_id,
     actor_id: user.id,
     actor_type: "admin",
@@ -222,7 +224,7 @@ export async function POST(request: Request) {
 
   let requestStatus = requestRow.status;
   if (waitingStatuses.has(requestRow.status)) {
-    const { data: updatedRequest, error: statusError } = await supabase
+    const { data: updatedRequest, error: statusError } = await dataClient
       .from("service_requests")
       .update({ status: "Waiting for Customer", updated_at: now, ...(!["completed", "archived"].includes(requestRow.lifecycle_stage) ? { lifecycle_stage: "waiting_for_documents", lifecycle_stage_updated_at: now, lifecycle_stage_updated_by: user.id } : {}) })
       .eq("id", payload.request_id)
@@ -239,9 +241,9 @@ export async function POST(request: Request) {
       });
     } else if (updatedRequest) {
       requestStatus = updatedRequest.status as string;
-      if (!["completed", "archived", "waiting_for_documents"].includes(requestRow.lifecycle_stage)) await supabase.from("request_activity_log").insert({ request_id: payload.request_id, actor_id: user.id, actor_type: "admin", action: "lifecycle_stage_changed", details: { previous_stage: requestRow.lifecycle_stage, new_stage: "waiting_for_documents", changed_at: now } });
+      if (!["completed", "archived", "waiting_for_documents"].includes(requestRow.lifecycle_stage)) await dataClient.from("request_activity_log").insert({ request_id: payload.request_id, actor_id: user.id, actor_type: "admin", action: "lifecycle_stage_changed", details: { previous_stage: requestRow.lifecycle_stage, new_stage: "waiting_for_documents", changed_at: now } });
     } else {
-      const { data: latestRequest } = await supabase
+      const { data: latestRequest } = await dataClient
         .from("service_requests")
         .select("status")
         .eq("id", payload.request_id)

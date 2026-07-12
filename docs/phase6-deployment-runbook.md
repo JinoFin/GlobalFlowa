@@ -4,7 +4,7 @@ Phase 6 is one coordinated application and database release. The application rea
 
 ## Preconditions
 
-1. Confirm the seven local Phase 6 commits (6A–6G), a clean worktree, and the expected `main` history.
+1. Confirm the seven local Phase 6 commits (6A–6G), the access-control correction commit, a clean worktree, and the expected `main` history.
 2. Run lint, production build, dependency audit, diff check, secret scan, and the structural route checks.
 3. Review `supabase/migrations/202607110002_phase6_customer_lifecycle.sql` in full. Do not substitute `supabase/schema.sql`; that file is bootstrap/reference SQL only.
 4. Confirm production remains on the Phase 5 application and schema.
@@ -14,16 +14,18 @@ Phase 6 is one coordinated application and database release. The application rea
 
 1. Apply only `supabase/migrations/202607110002_phase6_customer_lifecycle.sql` through the controlled production migration process.
 2. Verify the migration committed successfully as one transaction.
-3. Verify the added profile fields, `customer_companies`, lifecycle/completion/archive fields, deliverable fields, customer-safe checklist view, indexes, triggers, functions, RLS policies, grants, and private storage behavior.
+3. Verify the added profile fields, `customer_companies`, lifecycle/completion/archive fields, deliverable fields, indexes, triggers, functions, RLS policies, explicit grants, and private storage behavior.
 4. Confirm `claim_requests_for_current_customer()`, `update_request_lifecycle_stage(...)`, and `perform_request_lifecycle_action(...)` reject anonymous execution and have the intended authenticated grants.
-5. Configure the Auth and URL settings in `docs/supabase-auth-configuration.md`.
-6. Configure or verify custom SMTP and the verified sending domain. Test the email templates.
-7. Run read-only database smoke queries and confirm the `request-documents` bucket is still private.
-8. Push the seven reviewed Phase 6 commits to GitHub.
-9. Wait for the Vercel production deployment and confirm the build is `READY`.
-10. Review runtime errors without exposing customer data or secrets.
-11. Execute every test in the Phase 6 final acceptance record in `docs/live-qa-checklist.md`.
-12. Keep Phase 7 blocked until all Phase 6 acceptance results pass or have an approved disposition.
+5. Query table and routine grants and confirm the privilege matrix in `docs/phase6-security-audit.md`: protected tables have no `anon`/`authenticated` privileges, neither browser role has `TRUNCATE`, `REFERENCES`, or `TRIGGER`, and only the vetted RPCs are executable by `authenticated`.
+6. Test direct Data API requests with customer credentials: protected base tables must return permission denied, including `service_requests`, `request_files`, `internal_tasks`, and `request_activity_log`.
+7. Configure the Auth and URL settings in `docs/supabase-auth-configuration.md`.
+8. Configure or verify custom SMTP and the verified sending domain. Test the email templates.
+9. Run read-only database smoke queries and confirm the `request-documents` bucket is still private.
+10. Push the eight reviewed local commits to GitHub.
+11. Wait for the Vercel production deployment and confirm the build is `READY`.
+12. Review runtime errors without exposing customer data or secrets.
+13. Execute every test in the Phase 6 final acceptance record in `docs/live-qa-checklist.md`.
+14. Keep Phase 7 blocked until all Phase 6 acceptance results pass or have an approved disposition.
 
 Deploying application code first is unsafe: Phase 6 queries reference schema that does not exist in Phase 5 and would cause production runtime failures.
 
@@ -32,6 +34,8 @@ Deploying application code first is unsafe: Phase 6 queries reference schema tha
 - Run the migration in one transaction. Its table changes, functions, policies, triggers, indexes, grants, and PostgREST notification are transaction-safe.
 - The lifecycle and file-category backfills scan existing rows. Schedule a quiet release window and inspect table size first. Indexes are created non-concurrently and may briefly lock writes.
 - The migration is additive and preserves existing ownership, requests, customer uploads, internal files, messages, activities, assignments, and tasks.
+- Its final privilege block first revokes all protected-table privileges inherited from Phase 5 for `anon`, `authenticated`, and `service_role`, then restores only server-role `SELECT`, `INSERT`, and `UPDATE`. Public catalog tables restore read-only browser access.
+- Protected application data is server-only. RLS remains enabled as defense in depth, while direct customer/admin browser access is limited to the vetted role, verification, claim, and lifecycle functions.
 - Historical requests are not claimed during migration. Historical files default to non-public and are never promoted to final deliverables.
 - The upload guard and lifecycle action function lock only the affected request row during mutations; they do not take broad table locks at runtime.
 

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/admin/logout-button";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { lifecycleInfo, lifecycleStages } from "@/lib/request-lifecycle";
 
 export const metadata = {
@@ -51,8 +52,9 @@ export default async function AdminRequestsPage({ searchParams }: AdminRequestsP
   if (!(await isAdminUser(supabase, userData.user))) {
     redirect("/portal/requests");
   }
+  const dataClient = getSupabaseServiceClient();
 
-  let query = supabase
+  let query = dataClient
     .from("service_requests")
     .select("id, created_at, updated_at, status, urgency, country, company_name, contact_person, email, main_service, lifecycle_stage, completed_at, archived_at, request_services(service_name, service_slug), request_document_checklist(status, required), request_files(is_final_deliverable, customer_visible, published_at, deleted_at)")
     .order("created_at", { ascending: false })

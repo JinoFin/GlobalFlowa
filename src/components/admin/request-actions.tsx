@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const statuses = [
   "New",
@@ -36,51 +35,22 @@ export function RequestActions({
     setMessage(null);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const actorId = userData.user?.id ?? null;
-
-      const { error: updateError } = await supabase
-        .from("service_requests")
-        .update({
+      const response = await fetch("/api/admin/request-update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          request_id: requestId,
           status,
           assigned_to: assignedTo || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", requestId);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      if (note || missingDocuments) {
-        const documents = missingDocuments
-          .split("\n")
-          .map((item) => item.trim())
-          .filter(Boolean);
-
-        const { error: noteError } = await supabase.from("admin_notes").insert({
-          request_id: requestId,
-          author_id: actorId,
-          note: note || "Missing documents marked.",
-          missing_documents: documents,
+          note,
+          missing_documents: missingDocuments.split("\n").map((item) => item.trim()).filter(Boolean),
           customer_visible: customerVisible,
-        });
-
-        if (noteError) {
-          throw noteError;
-        }
-      }
-
-      await supabase.from("request_activity_log").insert({
-        request_id: requestId,
-        actor_id: actorId,
-        actor_type: "admin",
-        action: "admin_update",
-        details: { status, assigned_to: assignedTo || null },
+        }),
       });
+      const result = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not save changes.");
 
-      setMessage("Saved.");
+      setMessage(result.message ?? "Saved.");
       setNote("");
       setMissingDocuments("");
       setCustomerVisible(false);

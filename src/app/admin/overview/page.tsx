@@ -8,6 +8,7 @@ import {
 } from "@/components/admin/operational-alerts";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { daysAgoIso } from "@/lib/server-time";
 
 export const metadata = {
@@ -90,6 +91,7 @@ export default async function AdminOverviewPage() {
   if (!(await isAdminUser(supabase, userData.user))) {
     redirect("/portal/requests");
   }
+  const dataClient = getSupabaseServiceClient();
 
   const recentCutoff = daysAgoIso(30);
   const [
@@ -113,52 +115,52 @@ export default async function AdminOverviewPage() {
     operationsTaskResult,
     operationsChecklistResult,
   ] = await Promise.all([
-    supabase.from("service_requests").select("id", { count: "exact", head: true }),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "New").not("lifecycle_stage", "in", "(completed,archived)"),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "In Review").not("lifecycle_stage", "in", "(completed,archived)"),
-    supabase
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }),
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "New").not("lifecycle_stage", "in", "(completed,archived)"),
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }).eq("status", "In Review").not("lifecycle_stage", "in", "(completed,archived)"),
+    dataClient
       .from("service_requests")
       .select("id", { count: "exact", head: true })
       .eq("lifecycle_stage", "waiting_for_documents"),
-    supabase
+    dataClient
       .from("request_document_checklist")
       .select("id, service_requests!inner(lifecycle_stage)", { count: "exact", head: true })
       .in("status", ["uploaded", "under_review"])
       .not("service_requests.lifecycle_stage", "in", "(completed,archived)"),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "completed"),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).not("lifecycle_stage", "in", "(completed,archived)"),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).in("lifecycle_stage", ["processing", "external_processing"]),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "final_review"),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "completed").gte("completed_at", recentCutoff),
-    supabase.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "archived"),
-    supabase.from("service_requests").select("id").eq("lifecycle_stage", "completed"),
-    supabase.from("request_files").select("request_id").eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
-    supabase
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "completed"),
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }).not("lifecycle_stage", "in", "(completed,archived)"),
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }).in("lifecycle_stage", ["processing", "external_processing"]),
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "final_review"),
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "completed").gte("completed_at", recentCutoff),
+    dataClient.from("service_requests").select("id", { count: "exact", head: true }).eq("lifecycle_stage", "archived"),
+    dataClient.from("service_requests").select("id").eq("lifecycle_stage", "completed"),
+    dataClient.from("request_files").select("request_id").eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
+    dataClient
       .from("customer_messages")
       .select("id, request_id, subject, created_at, email_status")
       .order("created_at", { ascending: false })
       .limit(5),
-    supabase
+    dataClient
       .from("request_files")
       .select("id, request_id, file_name, created_at")
       .eq("uploaded_by_role", "customer")
       .order("created_at", { ascending: false })
       .limit(5),
-    supabase
+    dataClient
       .from("request_activity_log")
       .select("id, request_id, action, actor_type, created_at")
       .order("created_at", { ascending: false })
       .limit(8),
-    supabase
+    dataClient
       .from("service_requests")
       .select("id, company_name, status, priority, assigned_to, due_at, updated_at, lifecycle_stage, completed_at, archived_at")
       .order("created_at", { ascending: false })
       .limit(250),
-    supabase
+    dataClient
       .from("internal_tasks")
       .select("id, request_id, title, status, priority, assigned_to, due_at")
       .limit(500),
-    supabase
+    dataClient
       .from("request_document_checklist")
       .select("request_id, status")
       .in("status", ["uploaded", "under_review"]),
@@ -230,7 +232,7 @@ export default async function AdminOverviewPage() {
   let requestNames = new Map<string, string>();
 
   if (requestIds.length > 0) {
-    const { data: requestData, error: requestError } = await supabase
+    const { data: requestData, error: requestError } = await dataClient
       .from("service_requests")
       .select("id, company_name")
       .in("id", requestIds);

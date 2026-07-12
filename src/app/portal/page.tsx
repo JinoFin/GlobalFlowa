@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { claimRequestsForCurrentCustomer } from "@/lib/portal/claim-requests";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { getCustomerNextAction, lifecycleInfo, lifecycleProgress, normalizeLifecycleStage, type LifecycleStage } from "@/lib/request-lifecycle";
 import { LogoutButtonShell, PortalConfigNotice, formatDate } from "./requests/portal-ui";
 
@@ -19,16 +20,19 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   catch { return <PortalConfigNotice message="Customer dashboard is not configured." />; }
   const { data } = await supabase.auth.getUser();
   if (!data.user || !(await isVerifiedCustomer(supabase, data.user))) redirect("/portal/login");
+  let dataClient;
+  try { dataClient = getSupabaseServiceClient(); }
+  catch { return <PortalConfigNotice message="Your dashboard is temporarily unavailable." />; }
   const providedCount = Number.parseInt((await searchParams).linked ?? "", 10);
   const claimedCount = Number.isSafeInteger(providedCount) && providedCount > 0 ? providedCount : await claimRequestsForCurrentCustomer(supabase).catch(() => 0);
-  const { data: requests, error } = await supabase.from("service_requests").select("id, created_at, company_name, main_service, lifecycle_stage, lifecycle_stage_updated_at, completed_at, customer_completion_note, archived_at").eq("customer_access_enabled", true).eq("customer_user_id", data.user.id).order("created_at", { ascending: false });
+  const { data: requests, error } = await dataClient.from("service_requests").select("id, created_at, company_name, main_service, lifecycle_stage, lifecycle_stage_updated_at, completed_at, customer_completion_note, archived_at").eq("customer_access_enabled", true).eq("customer_user_id", data.user.id).order("created_at", { ascending: false });
   if (error) return <PortalConfigNotice message="Your dashboard could not be loaded." />;
   const rows = (requests ?? []) as DashboardRequest[];
   const ids = rows.map((row) => row.id);
   const [{ data: checklist }, { data: messages }, { data: deliverables }] = ids.length ? await Promise.all([
-    supabase.from("request_document_checklist").select("request_id, status, required").in("request_id", ids),
-    supabase.from("customer_messages").select("request_id, checklist_item_ids").in("request_id", ids).eq("customer_visible", true),
-    supabase.from("request_files").select("request_id").in("request_id", ids).eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
+    dataClient.from("request_document_checklist").select("request_id, status, required").in("request_id", ids).eq("customer_visible", true),
+    dataClient.from("customer_messages").select("request_id, checklist_item_ids").in("request_id", ids).eq("customer_visible", true),
+    dataClient.from("request_files").select("request_id").in("request_id", ids).eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
   ]) : [{ data: [] }, { data: [] }, { data: [] }];
   const checklistByRequest = groupChecklist((checklist ?? []) as ChecklistItem[]);
   const actionMessages = new Set(((messages ?? []) as MessageItem[]).filter((message) => message.checklist_item_ids.length > 0).map((message) => message.request_id));

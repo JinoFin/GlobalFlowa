@@ -24,6 +24,7 @@ import {
 } from "@/components/admin/request-ownership-section";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { normalizeLifecycleStage } from "@/lib/request-lifecycle";
 
 export const dynamic = "force-dynamic";
@@ -150,27 +151,28 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   if (!(await isAdminUser(supabase, userData.user))) {
     redirect("/portal/requests");
   }
+  const dataClient = getSupabaseServiceClient();
 
   const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: activity }, { data: customerMessages }, { data: staffProfiles }, { data: internalTasks }] =
     await Promise.all([
-      supabase.from("service_requests").select("*").eq("id", id).single(),
-      supabase.from("request_services").select("service_name, service_slug").eq("request_id", id),
-      supabase.from("request_answers").select("*").eq("request_id", id).order("created_at"),
-      supabase.from("request_files").select("*").eq("request_id", id).order("created_at"),
-      supabase.from("request_document_checklist").select("*").eq("request_id", id).order("sort_order"),
-      supabase.from("admin_notes").select("*").eq("request_id", id).order("created_at", { ascending: false }),
-      supabase.from("request_activity_log").select("*").eq("request_id", id).order("created_at", { ascending: false }),
-      supabase
+      dataClient.from("service_requests").select("*").eq("id", id).single(),
+      dataClient.from("request_services").select("service_name, service_slug").eq("request_id", id),
+      dataClient.from("request_answers").select("*").eq("request_id", id).order("created_at"),
+      dataClient.from("request_files").select("*").eq("request_id", id).order("created_at"),
+      dataClient.from("request_document_checklist").select("*").eq("request_id", id).order("sort_order"),
+      dataClient.from("admin_notes").select("*").eq("request_id", id).order("created_at", { ascending: false }),
+      dataClient.from("request_activity_log").select("*").eq("request_id", id).order("created_at", { ascending: false }),
+      dataClient
         .from("customer_messages")
         .select("id, subject, message, email_status, customer_visible, created_at, sent_at")
         .eq("request_id", id)
         .order("created_at", { ascending: false }),
-      supabase
+      dataClient
         .from("profiles")
         .select("id, full_name, email, role")
         .in("role", ["admin", "team"])
         .order("full_name"),
-      supabase
+      dataClient
         .from("internal_tasks")
         .select("id, title, description, status, priority, assigned_to, due_at, completed_at, created_at")
         .eq("request_id", id)
@@ -186,8 +188,8 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   const linkedActivity = activityRows.find((item) => item.action === "customer_account_linked");
   const [customerProfileResult, customerCompanyResult] = requestRow.customer_user_id
     ? await Promise.all([
-        supabase.from("profiles").select("email, full_name, phone, job_title").eq("id", requestRow.customer_user_id).maybeSingle(),
-        supabase.from("customer_companies").select("legal_name, country_code, registration_number, vat_number, address_line_1, address_line_2, city, postal_code").eq("owner_user_id", requestRow.customer_user_id).maybeSingle(),
+        dataClient.from("profiles").select("email, full_name, phone, job_title").eq("id", requestRow.customer_user_id).maybeSingle(),
+        dataClient.from("customer_companies").select("legal_name, country_code, registration_number, vat_number, address_line_1, address_line_2, city, postal_code").eq("owner_user_id", requestRow.customer_user_id).maybeSingle(),
       ])
     : [{ data: null }, { data: null }];
   const customerProfile = customerProfileResult.data as CustomerProfileRow | null;

@@ -40,7 +40,18 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const { data: fileRow, error: fileError } = await supabase
+  let serviceClient;
+  try {
+    serviceClient = getSupabaseServiceClient();
+  } catch (error) {
+    console.error("Admin file storage setup failed", { fileId: id, reason: error instanceof Error ? error.message : "unknown error" });
+    return NextResponse.json(
+      { error: "Secure staff file access is temporarily unavailable." },
+      { status: 503 },
+    );
+  }
+
+  const { data: fileRow, error: fileError } = await serviceClient
     .from("request_files")
     .select("file_name, storage_bucket, storage_path")
     .eq("id", id)
@@ -54,17 +65,6 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
     return NextResponse.json(
       { error: "File not found or unavailable." },
       { status: 404 },
-    );
-  }
-
-  let serviceClient;
-  try {
-    serviceClient = getSupabaseServiceClient();
-  } catch (error) {
-    console.error("Admin file storage setup failed", { fileId: id, reason: error instanceof Error ? error.message : "unknown error" });
-    return NextResponse.json(
-      { error: "Secure staff file access is temporarily unavailable." },
-      { status: 503 },
     );
   }
 

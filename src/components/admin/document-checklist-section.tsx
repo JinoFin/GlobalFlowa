@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   checklistCategories,
   checklistStatuses,
@@ -89,34 +88,20 @@ export function DocumentChecklistSection({
     setMessage(null);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const actorId = userData.user?.id ?? null;
-
-      const { error } = await supabase
-        .from("request_document_checklist")
-        .update({
+      const response = await fetch("/api/admin/checklist-item", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          request_id: requestId,
+          checklist_item_id: item.id,
           status: item.draftStatus,
           admin_note: item.draftNote || null,
           admin_note_customer_visible: item.draftAdminNoteCustomerVisible,
           linked_file_id: item.draftFileId || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", item.id);
-
-      if (error) throw error;
-
-      await supabase.from("request_activity_log").insert({
-        request_id: requestId,
-        actor_id: actorId,
-        actor_type: "admin",
-        action: "checklist_updated",
-        details: {
-          document_key: item.document_key,
-          status: item.draftStatus,
-          linked_file_id: item.draftFileId || null,
-        },
+        }),
       });
+      const result = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      if (!response.ok) throw new Error(result.error ?? "Could not save checklist item.");
 
       setItems((current) =>
         current.map((currentItem) =>
@@ -131,7 +116,7 @@ export function DocumentChecklistSection({
             : currentItem,
         ),
       );
-      setMessage("Checklist item saved.");
+      setMessage(result.message ?? "Checklist item saved.");
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save checklist item.");

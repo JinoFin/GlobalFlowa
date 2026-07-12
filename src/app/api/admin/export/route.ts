@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,8 +37,9 @@ export async function GET() {
   if (!(await isAdminUser(supabase, userData.user))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
+  const dataClient = getSupabaseServiceClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("service_requests")
     .select("id, created_at, status, urgency, company_name, contact_person, email, country, main_service")
     .order("created_at", { ascending: false });

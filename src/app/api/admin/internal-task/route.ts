@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
   const user = userData.user;
   if (userError || !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   if (!(await isAdminUser(supabase, user))) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  const dataClient = getSupabaseServiceClient();
 
   let body: unknown;
   try {
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
   const payload = parsed.data;
 
   if ("assigned_to" in payload && payload.assigned_to) {
-    const { data: assignee } = await supabase
+    const { data: assignee } = await dataClient
       .from("profiles")
       .select("id")
       .eq("id", payload.assigned_to)
@@ -83,14 +85,14 @@ export async function POST(request: Request) {
   }
 
   if (payload.action === "create") {
-    const { data: serviceRequest } = await supabase
+    const { data: serviceRequest } = await dataClient
       .from("service_requests")
       .select("id")
       .eq("id", payload.request_id)
       .maybeSingle();
     if (!serviceRequest) return NextResponse.json({ error: "Request not found." }, { status: 404 });
 
-    const { data: task, error: insertError } = await supabase
+    const { data: task, error: insertError } = await dataClient
       .from("internal_tasks")
       .insert({
         request_id: payload.request_id,
@@ -118,11 +120,11 @@ export async function POST(request: Request) {
         ? [activityRow(payload.request_id, user.id, "internal_task_assigned", task.id, payload.title, { assigned_to: payload.assigned_to })]
         : []),
     ];
-    await logActivity(supabase, activityRows, payload.request_id);
+    await logActivity(dataClient, activityRows, payload.request_id);
     return NextResponse.json({ ok: true, taskId: task.id, message: "Internal task created." });
   }
 
-  const { data: existingData, error: taskError } = await supabase
+  const { data: existingData, error: taskError } = await dataClient
     .from("internal_tasks")
     .select("id, request_id, title, description, status, priority, assigned_to, due_at")
     .eq("id", payload.task_id)
@@ -137,7 +139,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
 
   if (payload.action === "update") {
-    const { error: updateError } = await supabase
+    const { error: updateError } = await dataClient
       .from("internal_tasks")
       .update({
         title: payload.title,
@@ -167,7 +169,7 @@ export async function POST(request: Request) {
           })]
         : []),
     ];
-    await logActivity(supabase, rows, existing.request_id);
+    await logActivity(dataClient, rows, existing.request_id);
     return NextResponse.json({ ok: true, message: "Internal task updated." });
   }
 
@@ -177,7 +179,7 @@ export async function POST(request: Request) {
     cancel: { status: "cancelled", completed_at: null, activity: "internal_task_cancelled", message: "Task cancelled." },
   }[payload.action];
 
-  const { error: transitionError } = await supabase
+  const { error: transitionError } = await dataClient
     .from("internal_tasks")
     .update({ status: transition.status, completed_at: transition.completed_at, updated_at: now })
     .eq("id", existing.id)
@@ -185,7 +187,7 @@ export async function POST(request: Request) {
   if (transitionError) return taskMutationError(payload.action, transitionError.message, existing);
 
   await logActivity(
-    supabase,
+    dataClient,
     [activityRow(existing.request_id, user.id, transition.activity, existing.id, existing.title, {})],
     existing.request_id,
   );
@@ -209,7 +211,7 @@ function activityRow(
   };
 }
 
-async function logActivity(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>, rows: Array<Record<string, unknown>>, requestId: string) {
+async function logActivity(supabase: ReturnType<typeof getSupabaseServiceClient>, rows: Array<Record<string, unknown>>, requestId: string) {
   const { error } = await supabase.from("request_activity_log").insert(rows);
   if (error) console.error("Internal task activity logging failed after persistence", { requestId, reason: error.message });
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
   if (!(await isAdminUser(supabase, user))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
+  const dataClient = getSupabaseServiceClient();
 
   let rawPayload: unknown;
   try {
@@ -78,13 +80,13 @@ export async function POST(request: Request) {
   const payload = parsed.data;
   const [{ data: fileData, error: fileError }, { data: checklistData, error: checklistError }] =
     await Promise.all([
-      supabase
+      dataClient
         .from("request_files")
         .select("id, request_id, uploaded_by_role, linked_checklist_item_id")
         .eq("id", payload.file_id)
         .eq("request_id", payload.request_id)
         .maybeSingle(),
-      supabase
+      dataClient
         .from("request_document_checklist")
         .select("id, request_id, title, linked_file_id")
         .eq("id", payload.checklist_item_id)
@@ -136,7 +138,7 @@ export async function POST(request: Request) {
         updated_at: now,
       };
 
-  const { data: updatedChecklist, error: updateError } = await supabase
+  const { data: updatedChecklist, error: updateError } = await dataClient
     .from("request_document_checklist")
     .update(checklistUpdate)
     .eq("id", checklistRow.id)
@@ -163,7 +165,7 @@ export async function POST(request: Request) {
   }
 
   const action = isAccepted ? "document_accepted" : "document_rejected";
-  const { error: activityError } = await supabase.from("request_activity_log").insert({
+  const { error: activityError } = await dataClient.from("request_activity_log").insert({
     request_id: payload.request_id,
     actor_id: user.id,
     actor_type: "admin",

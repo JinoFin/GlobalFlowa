@@ -398,7 +398,6 @@ from public.request_document_checklist as checklist
 where checklist.customer_visible = true;
 
 revoke all on public.customer_request_checklist from public, anon;
-grant select on public.customer_request_checklist to authenticated;
 
 alter table public.admin_notes add column if not exists customer_visible boolean not null default false;
 
@@ -467,35 +466,19 @@ alter table public.customer_companies enable row level security;
 
 grant select on public.services to anon, authenticated;
 grant select on public.service_questions to anon, authenticated;
-grant select, insert, update, delete on public.profiles to authenticated;
 revoke all on public.profiles from anon;
 revoke update on public.profiles from authenticated;
-grant update (full_name, phone, job_title, preferred_language, timezone, updated_at) on public.profiles to authenticated;
-grant select, insert, update, delete on public.service_requests to authenticated;
 revoke all on public.service_requests from anon;
-grant select, insert, update, delete on public.request_services to authenticated;
 revoke all on public.request_services from anon;
-grant select, insert, update, delete on public.request_answers to authenticated;
 revoke all on public.request_answers from anon;
-grant select, insert, update, delete on public.request_files to authenticated;
 revoke all on public.request_files from anon;
-grant select, insert, update, delete on public.document_templates to authenticated;
-grant select, insert, update, delete on public.request_document_checklist to authenticated;
 revoke all on public.request_document_checklist from anon;
-grant select, insert, update, delete on public.recommendation_sessions to authenticated;
-grant select, insert, update, delete on public.recommendation_answers to authenticated;
-grant select, insert, update, delete on public.admin_notes to authenticated;
 revoke all on public.admin_notes from anon;
 revoke all on public.customer_messages from anon, authenticated;
-grant select, insert, update on public.customer_messages to authenticated;
-grant select, insert, update, delete on public.request_activity_log to authenticated;
 revoke all on public.request_activity_log from anon;
 revoke all on public.customer_account_activity from anon, authenticated;
-grant select on public.customer_account_activity to authenticated;
 revoke all on public.customer_companies from anon, authenticated;
-grant select, insert, update on public.customer_companies to authenticated;
 revoke all on public.internal_tasks from anon, authenticated;
-grant select, insert, update, delete on public.internal_tasks to authenticated;
 revoke all on public.internal_tasks from anon;
 
 create or replace function public.current_user_role()
@@ -1097,3 +1080,70 @@ using (
   bucket_id = 'request-documents'
   and public.is_admin_or_team()
 );
+
+-- Final Data API privilege model. Protected application tables are server-only;
+-- browser roles retain only the public catalog and the vetted RPC allowlist.
+revoke all privileges on table
+  public.profiles,
+  public.service_requests,
+  public.request_services,
+  public.request_answers,
+  public.request_files,
+  public.document_templates,
+  public.request_document_checklist,
+  public.recommendation_sessions,
+  public.recommendation_answers,
+  public.admin_notes,
+  public.customer_messages,
+  public.request_activity_log,
+  public.internal_tasks,
+  public.customer_account_activity,
+  public.customer_companies
+from anon, authenticated, service_role;
+
+grant select, insert, update on table
+  public.profiles,
+  public.service_requests,
+  public.request_services,
+  public.request_answers,
+  public.request_files,
+  public.document_templates,
+  public.request_document_checklist,
+  public.recommendation_sessions,
+  public.recommendation_answers,
+  public.admin_notes,
+  public.customer_messages,
+  public.request_activity_log,
+  public.internal_tasks,
+  public.customer_account_activity,
+  public.customer_companies
+to service_role;
+
+revoke all privileges on table public.services, public.service_questions
+from anon, authenticated, service_role;
+grant select on table public.services, public.service_questions to anon, authenticated;
+grant select, insert, update on table public.services, public.service_questions to service_role;
+
+revoke all privileges on table public.customer_request_checklist
+from public, anon, authenticated, service_role;
+grant select on table public.customer_request_checklist to service_role;
+
+revoke all on function public.current_user_role() from public, anon, authenticated;
+revoke all on function public.current_user_is_admin() from public, anon, authenticated;
+revoke all on function public.current_user_is_admin_or_team() from public, anon, authenticated;
+revoke all on function public.is_admin() from public, anon, authenticated;
+revoke all on function public.is_admin_or_team() from public, anon, authenticated;
+revoke all on function public.is_verified_customer() from public, anon, authenticated;
+revoke all on function public.claim_requests_for_current_customer() from public, anon, authenticated;
+revoke all on function public.update_request_lifecycle_stage(uuid,text) from public, anon, authenticated;
+revoke all on function public.perform_request_lifecycle_action(uuid,text,text,text,text,boolean) from public, anon, authenticated;
+
+grant execute on function public.current_user_role() to authenticated;
+grant execute on function public.current_user_is_admin() to authenticated;
+grant execute on function public.current_user_is_admin_or_team() to authenticated;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_admin_or_team() to authenticated;
+grant execute on function public.is_verified_customer() to authenticated;
+grant execute on function public.claim_requests_for_current_customer() to authenticated;
+grant execute on function public.update_request_lifecycle_stage(uuid,text) to authenticated;
+grant execute on function public.perform_request_lifecycle_action(uuid,text,text,text,text,boolean) to authenticated;

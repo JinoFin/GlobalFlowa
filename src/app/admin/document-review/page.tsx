@@ -7,6 +7,7 @@ import {
 import { LogoutButton } from "@/components/admin/logout-button";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "Admin Document Review",
@@ -68,8 +69,9 @@ export default async function AdminDocumentReviewPage() {
   if (!(await isAdminUser(supabase, userData.user))) {
     redirect("/portal/requests");
   }
+  const dataClient = getSupabaseServiceClient();
 
-  const { data: fileData, error: fileError } = await supabase
+  const { data: fileData, error: fileError } = await dataClient
     .from("request_files")
     .select("id, request_id, file_name, created_at, linked_checklist_item_id")
     .eq("uploaded_by_role", "customer")
@@ -93,11 +95,11 @@ export default async function AdminDocumentReviewPage() {
   const requestIds = [...new Set(fileRows.map((file) => file.request_id))];
   const [{ data: checklistData, error: checklistError }, { data: requestData, error: requestError }] =
     await Promise.all([
-      supabase
+      dataClient
         .from("request_document_checklist")
         .select("id, request_id, title, status, linked_file_id, admin_note, admin_note_customer_visible")
         .in("request_id", requestIds),
-      supabase
+      dataClient
         .from("service_requests")
         .select("id, company_name, email, customer_email, main_service, priority, status")
         .in("id", requestIds),

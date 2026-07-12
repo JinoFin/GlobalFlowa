@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { portalProfileSchema } from "@/lib/portal/profile-validation";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { hasTrustedMutationOrigin } from "@/lib/http/security";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
   }
 
+  let dataClient;
+  try { dataClient = getSupabaseServiceClient(); }
+  catch { return NextResponse.json({ ok: false, message: "Customer profiles are temporarily unavailable." }, { status: 503 }); }
+
   const parsed = portalProfileSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -43,7 +48,7 @@ export async function POST(request: Request) {
       preferred_language: parsed.data.preferred_language,
       timezone: parsed.data.timezone,
     };
-    const { error } = await supabase
+    const { error } = await dataClient
       .from("profiles")
       .update({ ...personal, updated_at: new Date().toISOString() })
       .eq("id", user.id);
@@ -67,7 +72,7 @@ export async function POST(request: Request) {
       contact_email: parsed.data.contact_email,
       contact_phone: parsed.data.contact_phone,
     };
-    const { error } = await supabase
+    const { error } = await dataClient
       .from("customer_companies")
       .upsert(
         { ...company, owner_user_id: user.id, updated_at: new Date().toISOString() },

@@ -4,6 +4,7 @@ import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "
 import { ClaimRequestsButton } from "@/components/portal/claim-requests-button";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { getCustomerNextAction, lifecycleInfo, lifecycleProgress, normalizeLifecycleStage } from "@/lib/request-lifecycle";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,11 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
     redirect("/portal/login");
   }
 
-  const { data: requests, error } = await supabase
+  let dataClient;
+  try { dataClient = getSupabaseServiceClient(); }
+  catch { return <PortalConfigNotice message="Your requests are temporarily unavailable." />; }
+
+  const { data: requests, error } = await dataClient
     .from("service_requests")
     .select("id, created_at, company_name, main_service, lifecycle_stage, lifecycle_stage_updated_at, completed_at, customer_completion_note, archived_at")
     .eq("customer_access_enabled", true)
@@ -62,8 +67,8 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
   const requestIds = requestRows.map((request) => request.id);
   const [{ data: checklistRows }, { data: deliverableRows }] = requestIds.length
     ? await Promise.all([
-        supabase.from("request_document_checklist").select("request_id, status, required").in("request_id", requestIds),
-        supabase.from("request_files").select("request_id").in("request_id", requestIds).eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
+        dataClient.from("request_document_checklist").select("request_id, status, required").in("request_id", requestIds).eq("customer_visible", true),
+        dataClient.from("request_files").select("request_id").in("request_id", requestIds).eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
       ])
     : [{ data: [] }, { data: [] }];
   const summaries = summarizeChecklist((checklistRows ?? []) as ChecklistRow[]);

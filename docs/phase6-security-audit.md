@@ -52,26 +52,52 @@ File: `supabase/migrations/202607110002_phase6_customer_lifecycle.sql`.
 
 ## Customer privacy review
 
-Portal request selections omit `assigned_to`, `assigned_by`, `assigned_at`, `priority`, `due_at`, `internal_notes`, `lifecycle_stage_updated_by`, `completed_by`, `reopened_by`, `archived_by`, `completion_summary`, staff profiles/emails, raw activity metadata, bucket names, and storage paths. Request answers now use an explicit field list. A security-invoker checklist view returns an admin note only when its customer-visible flag is true.
+Protected base tables are no longer exposed to `anon` or `authenticated`. Portal Server Components and route handlers authenticate the user first, then use the server-only service client with explicit ownership and customer-visibility filters. This makes application field lists a second boundary rather than the only column boundary. Portal responses omit `assigned_to`, `assigned_by`, `assigned_at`, `priority`, `due_at`, `internal_notes`, `lifecycle_stage_updated_by`, `completed_by`, `reopened_by`, `archived_by`, `completion_summary`, staff profiles/emails, raw activity metadata, bucket names, and storage paths.
+
+The existing `customer_request_checklist` security-invoker view is retained for schema compatibility but is not granted to browser roles. Portal checklist reads use the same protected server path as other customer data. `request_activity_log` and `internal_tasks` have no direct customer access.
 
 ## Access matrix
 
-RLS is the final row-level boundary for authenticated roles; the service role is used only in server code after application authorization.
+Legend: `S` SELECT, `I` INSERT, `U` UPDATE, `D` DELETE, `X` EXECUTE, `-` none. Admin/team entries describe application capability after the protected route rechecks the staff role; they are not direct base-table grants.
 
-| Resource | Anon | Verified customer | Admin/team | Service/server |
+| Resource | Anon | Authenticated customer | Authenticated admin/team | Service role |
 | --- | --- | --- | --- | --- |
-| `profiles` | None | Select self; update allowed personal columns on self | Read required profiles; admin management per existing policy | Full server capability |
-| `customer_companies` | None | Select/insert/update own; no delete | Read customer companies | Full server capability |
-| `service_requests` | None directly | Select owned enabled requests only; no customer update policy | Manage through staff RLS/routes | Validated submission/claim support |
-| `customer_messages` | None | Select own customer-visible rows only | Select/insert/update | Server email workflow |
-| `request_files` | None | Select own customer uploads and published deliverables only | Manage request files/deliverables | Validated upload and exact cleanup |
-| `request_activity_log` | None | No direct customer timeline access | Manage/read internal activity | Reliable event writes |
-| `internal_tasks` | None | None | Manage | Full server capability |
-| `storage.objects` | None | No broad direct read/write | Existing staff read policy | Exact-object upload/sign/delete |
-| Claim function | No execute | Execute for self; function rechecks verified customer | Execution harmlessly fails customer-role check | Owner/server operational access |
-| Lifecycle update/action functions | No execute | Execute grant exists but internal role checks reject | Execute; row-locked atomic staff actions | Owner/server operational access |
+| `profiles` | - | - | Server route: S/U | S/I/U |
+| `service_requests` | - | - | Server route: S/I/U | S/I/U |
+| `request_services` | - | - | Server route: S/I/U | S/I/U |
+| `request_answers` | - | - | Server route: S/I/U | S/I/U |
+| `request_files` | - | - | Server route: S/I/U | S/I/U |
+| `request_document_checklist` | - | - | Server route: S/I/U | S/I/U |
+| `admin_notes` | - | - | Server route: S/I/U | S/I/U |
+| `customer_messages` | - | - | Server route: S/I/U | S/I/U |
+| `request_activity_log` | - | - | Server route: S/I | S/I/U |
+| `internal_tasks` | - | - | Server route: S/I/U | S/I/U |
+| `customer_account_activity` | - | - | Server route: S | S/I/U |
+| `customer_companies` | - | - | Server route: S | S/I/U |
+| `document_templates` | - | - | Server route: S/I/U | S/I/U |
+| `recommendation_sessions` | - | - | Server route: S/I/U | S/I/U |
+| `recommendation_answers` | - | - | Server route: S/I/U | S/I/U |
+| `customer_request_checklist` view | - | - | Server route: S | S |
+| `services`, `service_questions` | S | S | S | S/I/U |
+| `current_user_role()` and role helpers | - | X | X | Not required |
+| `is_verified_customer()` | - | X | X | Not required |
+| `claim_requests_for_current_customer()` | - | X for self | Role check prevents staff claiming | Not required |
+| `update_request_lifecycle_stage(...)` | - | X grant, internal staff check rejects | X | Not required |
+| `perform_request_lifecycle_action(...)` | - | X grant, internal staff check rejects | X | Not required |
+| Trigger-only functions | - | - | - | - |
+| `storage.objects` | - | No broad direct access | Existing staff-only read policy | Exact-object upload/sign/remove |
 
-The authenticated execute grant on exposed RPC functions is intentional; each function independently derives and validates the caller. Trigger functions have no browser execute grant.
+Every listed protected base table is explicitly `REVOKE ALL` from `anon`, `authenticated`, and `service_role`, followed by only `SELECT, INSERT, UPDATE` for `service_role`. This removes `DELETE`, `TRUNCATE`, `REFERENCES`, and `TRIGGER` from all three roles. The application currently performs no protected base-table delete; deliverable deletion is a soft-delete metadata update plus exact storage-object removal.
+
+The authenticated execute grants are intentional and limited to the listed RPCs. Each RPC derives `auth.uid()` and independently checks verified-customer or staff authorization. Trigger functions have no browser execute grant. RLS policies remain enabled as defense in depth, but no customer can reach the protected base tables through the Data API.
+
+## Application compatibility after privilege hardening
+
+- Portal dashboard, request list/detail, profile reads, profile updates, customer uploads, and protected downloads authenticate and verify the customer before using server-only data access. Request ownership is always compared with the authenticated user ID.
+- Admin overview, requests, workboard, request detail, document review, export, messaging, assignment, internal tasks, checklist updates, and deliverables recheck admin/team membership before server-only data access.
+- The two former browser mutations for request updates and checklist items now use same-origin, Zod-validated admin routes. Browser input cannot supply actor identity.
+- Public and authenticated request submission continues through `POST /api/submit-request`, which validates input and uses the server-only service client. `anon` receives no protected table privilege.
+- Customer and staff downloads continue through protected routes. Storage paths and signed URLs are created only after authorization and are not stored.
 
 ## Read-only Vercel evidence
 

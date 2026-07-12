@@ -3,6 +3,7 @@ import { LogoutButtonShell, PortalConfigNotice } from "@/app/portal/requests/por
 import { PortalProfileEditor } from "@/components/portal/profile-editor";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Customer Profile" };
@@ -43,9 +44,13 @@ export default async function PortalProfilePage() {
   const user = userData.user;
   if (!user || !(await isVerifiedCustomer(supabase, user))) redirect("/portal/login");
 
+  let dataClient;
+  try { dataClient = getSupabaseServiceClient(); }
+  catch { return <PortalConfigNotice message="Your profile is temporarily unavailable." />; }
+
   const [profileResult, companyResult] = await Promise.all([
-    supabase.from("profiles").select("full_name, job_title, phone, preferred_language, timezone").eq("id", user.id).maybeSingle(),
-    supabase.from("customer_companies").select("legal_name, trading_name, registration_number, vat_number, country_code, address_line_1, address_line_2, city, postal_code, website, contact_name, contact_email, contact_phone").eq("owner_user_id", user.id).maybeSingle(),
+    dataClient.from("profiles").select("full_name, job_title, phone, preferred_language, timezone").eq("id", user.id).maybeSingle(),
+    dataClient.from("customer_companies").select("legal_name, trading_name, registration_number, vat_number, country_code, address_line_1, address_line_2, city, postal_code, website, contact_name, contact_email, contact_phone").eq("owner_user_id", user.id).maybeSingle(),
   ]);
 
   if (profileResult.error || companyResult.error) {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
-import { sanitizeDisplayFilename } from "@/lib/final-deliverables";
+import { hasValidDeliverableStorage, sanitizeDisplayFilename } from "@/lib/final-deliverables";
 import { privateNoStoreHeaders } from "@/lib/http/security";
 
 export const runtime = "nodejs";
@@ -10,12 +10,6 @@ export const dynamic = "force-dynamic";
 
 type FileDownloadRouteProps = {
   params: Promise<{ id: string }>;
-};
-
-type RequestFileRow = {
-  file_name: string;
-  storage_bucket: string;
-  storage_path: string;
 };
 
 export async function GET(_request: Request, { params }: FileDownloadRouteProps) {
@@ -35,18 +29,9 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
   }
 
   const { data: userData } = await supabase.auth.getUser();
-  if (!(await isVerifiedCustomer(supabase, userData.user))) {
+  const user = userData.user;
+  if (!user || !(await isVerifiedCustomer(supabase, user))) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  const { data: fileRow, error: fileError } = await supabase
-    .from("request_files")
-    .select("file_name, storage_bucket, storage_path")
-    .eq("id", id)
-    .single();
-
-  if (fileError || !fileRow) {
-    return NextResponse.json({ error: "File not found or access denied." }, { status: 404 });
   }
 
   let serviceClient;
@@ -63,10 +48,17 @@ export async function GET(_request: Request, { params }: FileDownloadRouteProps)
     );
   }
 
-  const file = fileRow as RequestFileRow;
-  if (file.storage_bucket !== "request-documents") {
+  const { data: file } = await serviceClient
+    .from("request_files")
+    .select("id, request_id, file_name, storage_bucket, storage_path, is_final_deliverable, customer_visible, published_at, deleted_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (!file || !file.is_final_deliverable || !file.customer_visible || !file.published_at || file.deleted_at || !hasValidDeliverableStorage(file.request_id, file.storage_bucket, file.storage_path)) {
     return NextResponse.json({ error: "File not found or access denied." }, { status: 404 });
   }
+  const { data: ownedRequest } = await serviceClient.from("service_requests").select("id").eq("id", file.request_id).eq("customer_user_id", user.id).eq("customer_access_enabled", true).maybeSingle();
+  if (!ownedRequest) return NextResponse.json({ error: "File not found or access denied." }, { status: 404 });
+
   const { data, error } = await serviceClient.storage
     .from(file.storage_bucket)
     .createSignedUrl(file.storage_path, 60, { download: sanitizeDisplayFilename(file.file_name) });

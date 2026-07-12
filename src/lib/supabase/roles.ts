@@ -5,13 +5,9 @@ export type ProfileRole = "admin" | "team" | "customer";
 export async function getProfileRole(supabase: SupabaseClient, user: User | null) {
   if (!user) return null;
 
-  const { data } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { data } = await supabase.rpc("current_user_role");
 
-  return (data?.role ?? null) as ProfileRole | null;
+  return (data ?? null) as ProfileRole | null;
 }
 
 export async function isAdminUser(supabase: SupabaseClient, user: User | null) {

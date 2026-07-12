@@ -12,7 +12,6 @@ create table if not exists public.customer_account_activity (
 
 alter table public.customer_account_activity enable row level security;
 revoke all on public.customer_account_activity from anon, authenticated;
-grant select on public.customer_account_activity to authenticated;
 
 alter table public.profiles add column if not exists phone text;
 alter table public.profiles add column if not exists job_title text;
@@ -207,7 +206,6 @@ create table if not exists public.customer_companies (
 create index if not exists idx_customer_companies_owner_user_id on public.customer_companies(owner_user_id);
 alter table public.customer_companies enable row level security;
 revoke all on public.customer_companies from anon, authenticated;
-grant select, insert, update on public.customer_companies to authenticated;
 
 create or replace view public.customer_request_checklist
 with (security_invoker = true)
@@ -230,10 +228,9 @@ from public.request_document_checklist as checklist
 where checklist.customer_visible = true;
 
 revoke all on public.customer_request_checklist from public, anon;
-grant select on public.customer_request_checklist to authenticated;
 
--- Remove legacy default privileges from protected Phase 5 tables. Staff and
--- customer capabilities continue through authenticated grants plus RLS.
+-- Remove legacy default privileges from protected Phase 5 tables. The final
+-- privilege block below replaces them with the server-only data boundary.
 revoke all on public.profiles from anon;
 revoke all on public.service_requests from anon;
 revoke all on public.request_services from anon;
@@ -246,7 +243,6 @@ revoke all on public.request_activity_log from anon;
 revoke all on public.internal_tasks from anon;
 
 revoke update on public.profiles from authenticated;
-grant update (full_name, phone, job_title, preferred_language, timezone, updated_at) on public.profiles to authenticated;
 
 create or replace function public.is_verified_customer()
 returns boolean
@@ -648,5 +644,81 @@ using (public.is_verified_customer() and customer_visible = true and exists (sel
 drop policy if exists "Customers can read own visible messages" on public.customer_messages;
 create policy "Customers can read own visible messages" on public.customer_messages for select to authenticated
 using (public.is_verified_customer() and customer_visible = true and exists (select 1 from public.service_requests sr where sr.id = customer_messages.request_id and sr.customer_access_enabled = true and sr.customer_user_id = (select auth.uid())));
+
+-- Final Phase 6 Data API boundary. Phase 5 granted the shared Supabase roles
+-- broad table privileges. RLS remains enabled as defense in depth, but all
+-- protected application data now flows through authenticated server routes or
+-- the small RPC allowlist below. This prevents row policies from accidentally
+-- exposing sensitive columns through direct REST queries.
+revoke all privileges on table
+  public.profiles,
+  public.service_requests,
+  public.request_services,
+  public.request_answers,
+  public.request_files,
+  public.document_templates,
+  public.request_document_checklist,
+  public.recommendation_sessions,
+  public.recommendation_answers,
+  public.admin_notes,
+  public.customer_messages,
+  public.request_activity_log,
+  public.internal_tasks,
+  public.customer_account_activity,
+  public.customer_companies
+from anon, authenticated, service_role;
+
+grant select, insert, update on table
+  public.profiles,
+  public.service_requests,
+  public.request_services,
+  public.request_answers,
+  public.request_files,
+  public.document_templates,
+  public.request_document_checklist,
+  public.recommendation_sessions,
+  public.recommendation_answers,
+  public.admin_notes,
+  public.customer_messages,
+  public.request_activity_log,
+  public.internal_tasks,
+  public.customer_account_activity,
+  public.customer_companies
+to service_role;
+
+-- The public service catalog is intentionally read-only through the Data API.
+revoke all privileges on table public.services, public.service_questions
+from anon, authenticated, service_role;
+grant select on table public.services, public.service_questions to anon, authenticated;
+grant select, insert, update on table public.services, public.service_questions to service_role;
+
+-- The checklist projection is retained as a security-invoker schema utility,
+-- but customer reads now use an ownership-checked server path. It therefore is
+-- not exposed to browser roles.
+revoke all privileges on table public.customer_request_checklist
+from public, anon, authenticated, service_role;
+grant select on table public.customer_request_checklist to service_role;
+
+-- Explicit RPC allowlist for authenticated callers. Every function derives
+-- auth.uid() and performs its own role/verification check.
+revoke all on function public.current_user_role() from public, anon, authenticated;
+revoke all on function public.current_user_is_admin() from public, anon, authenticated;
+revoke all on function public.current_user_is_admin_or_team() from public, anon, authenticated;
+revoke all on function public.is_admin() from public, anon, authenticated;
+revoke all on function public.is_admin_or_team() from public, anon, authenticated;
+revoke all on function public.is_verified_customer() from public, anon, authenticated;
+revoke all on function public.claim_requests_for_current_customer() from public, anon, authenticated;
+revoke all on function public.update_request_lifecycle_stage(uuid,text) from public, anon, authenticated;
+revoke all on function public.perform_request_lifecycle_action(uuid,text,text,text,text,boolean) from public, anon, authenticated;
+
+grant execute on function public.current_user_role() to authenticated;
+grant execute on function public.current_user_is_admin() to authenticated;
+grant execute on function public.current_user_is_admin_or_team() to authenticated;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_admin_or_team() to authenticated;
+grant execute on function public.is_verified_customer() to authenticated;
+grant execute on function public.claim_requests_for_current_customer() to authenticated;
+grant execute on function public.update_request_lifecycle_stage(uuid,text) to authenticated;
+grant execute on function public.perform_request_lifecycle_action(uuid,text,text,text,text,boolean) to authenticated;
 
 notify pgrst, 'reload schema';

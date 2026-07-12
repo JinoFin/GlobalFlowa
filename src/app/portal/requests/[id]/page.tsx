@@ -4,6 +4,7 @@ import { DocumentUploadForm } from "@/components/portal/document-upload-form";
 import { checklistCategories } from "@/lib/document-checklist";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "../portal-ui";
 import { LifecycleProgress } from "@/components/portal/lifecycle-progress";
 import { getCustomerNextAction, normalizeLifecycleStage } from "@/lib/request-lifecycle";
@@ -115,36 +116,41 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
     redirect("/portal/login");
   }
 
+  let dataClient;
+  try { dataClient = getSupabaseServiceClient(); }
+  catch { return <PortalConfigNotice message="This request is temporarily unavailable." />; }
+
   const [{ data: request }, { data: services }, { data: answers }, { data: files }, { data: checklist }, { data: notes }, { data: customerMessages }, { data: deliverables }] =
     await Promise.all([
-      supabase
+      dataClient
         .from("service_requests")
         .select("id, created_at, lifecycle_stage, lifecycle_stage_updated_at, completed_at, customer_completion_note, archived_at, company_name, contact_person, email, country, preferred_language, main_service, urgency, deadline, message")
         .eq("id", id)
         .eq("customer_access_enabled", true)
         .eq("customer_user_id", user.id)
         .maybeSingle(),
-      supabase.from("request_services").select("service_name, service_slug").eq("request_id", id),
-      supabase.from("request_answers").select("id, scope, service_slug, question_key, answer").eq("request_id", id).order("created_at"),
-      supabase.from("request_files").select("id, file_name, uploaded_by_role, linked_checklist_item_id, customer_note, created_at").eq("request_id", id).eq("uploaded_by_role", "customer").eq("is_final_deliverable", false).is("deleted_at", null).order("created_at", { ascending: false }),
-      supabase
-        .from("customer_request_checklist")
+      dataClient.from("request_services").select("service_name, service_slug").eq("request_id", id),
+      dataClient.from("request_answers").select("id, scope, service_slug, question_key, answer").eq("request_id", id).order("created_at"),
+      dataClient.from("request_files").select("id, file_name, uploaded_by_role, linked_checklist_item_id, customer_note, created_at").eq("request_id", id).eq("uploaded_by_role", "customer").eq("is_final_deliverable", false).is("deleted_at", null).order("created_at", { ascending: false }),
+      dataClient
+        .from("request_document_checklist")
         .select("id, document_key, title, description, category, status, admin_note, admin_note_customer_visible, customer_note, linked_file_id, required, sort_order")
         .eq("request_id", id)
+        .eq("customer_visible", true)
         .order("sort_order"),
-      supabase
+      dataClient
         .from("admin_notes")
         .select("id, note, missing_documents, created_at")
         .eq("request_id", id)
         .eq("customer_visible", true)
         .order("created_at", { ascending: false }),
-      supabase
+      dataClient
         .from("customer_messages")
         .select("id, created_at, subject, message, checklist_item_ids")
         .eq("request_id", id)
         .eq("customer_visible", true)
         .order("created_at", { ascending: false }),
-      supabase
+      dataClient
         .from("request_files")
         .select("id, title, description, file_category, file_name, file_size, published_at")
         .eq("request_id", id)

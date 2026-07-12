@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { getSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
   if (!(await isAdminUser(supabase, user))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
+  const dataClient = getSupabaseServiceClient();
 
   let body: unknown;
   try {
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
   }
   const payload = parsed.data;
 
-  const { data: existingData, error: requestError } = await supabase
+  const { data: existingData, error: requestError } = await dataClient
     .from("service_requests")
     .select("id, assigned_to, priority, due_at")
     .eq("id", payload.request_id)
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
   }
 
   if (payload.assigned_to) {
-    const { data: assignee, error: assigneeError } = await supabase
+    const { data: assignee, error: assigneeError } = await dataClient
       .from("profiles")
       .select("id, role")
       .eq("id", payload.assigned_to)
@@ -95,7 +97,7 @@ export async function POST(request: Request) {
   }
 
   const now = new Date().toISOString();
-  const { error: updateError } = await supabase
+  const { error: updateError } = await dataClient
     .from("service_requests")
     .update({
       assigned_to: payload.assigned_to,
@@ -148,7 +150,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const { error: activityError } = await supabase.from("request_activity_log").insert(activityRows);
+  const { error: activityError } = await dataClient.from("request_activity_log").insert(activityRows);
   if (activityError) {
     console.error("Request assignment activity logging failed after persistence", {
       requestId: payload.request_id,
