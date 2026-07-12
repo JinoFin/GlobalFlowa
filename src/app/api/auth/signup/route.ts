@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { signupSchema } from "@/lib/auth/validation";
 import { getConfiguredSiteUrl } from "@/lib/auth/redirects";
+import { hasTrustedMutationOrigin } from "@/lib/http/security";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!hasTrustedMutationOrigin(request)) {
+    return NextResponse.json({ ok: false, message: "Request not allowed." }, { status: 403 });
+  }
   const parsed = signupSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(

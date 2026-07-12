@@ -3,6 +3,7 @@ import { sendCustomerUploadEmail } from "@/lib/email/send";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
+import { hasTrustedMutationOrigin } from "@/lib/http/security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,9 @@ type ChecklistRow = {
 };
 
 export async function POST(request: Request) {
+  if (!hasTrustedMutationOrigin(request)) {
+    return NextResponse.json({ error: "Request not allowed." }, { status: 403 });
+  }
   let authClient;
 
   try {
@@ -156,10 +160,14 @@ export async function POST(request: Request) {
       .single();
 
     if (fileInsertError || !fileRow) {
+      const { error: cleanupError } = await serviceClient.storage
+        .from("request-documents")
+        .remove([storagePath]);
       console.error("Customer portal file metadata insert failed", {
         requestId,
         checklistItemId,
         reason: fileInsertError?.message ?? "missing inserted file row",
+        cleanupFailed: Boolean(cleanupError),
       });
       return NextResponse.json({ error: "Could not save uploaded file metadata." }, { status: 500 });
     }
@@ -192,9 +200,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not update the checklist item." }, { status: 500 });
   }
 
-  const lifecycleAdvanced = Boolean(fileId) && ["required", "missing", "incorrect", "expired"].includes(checklistBeforeUpload.status) && !["completed", "archived"].includes((requestRow as RequestRow).lifecycle_stage);
-  if (lifecycleAdvanced) {
-    await serviceClient.from("service_requests").update({ lifecycle_stage: "document_review", lifecycle_stage_updated_at: new Date().toISOString() }).eq("id", requestId);
+  let lifecycleAdvanced = false;
+  if (fileId && ["required", "missing", "incorrect", "expired"].includes(checklistBeforeUpload.status)) {
+    const { data: advancedRequest } = await serviceClient
+      .from("service_requests")
+      .update({ lifecycle_stage: "document_review", lifecycle_stage_updated_at: new Date().toISOString() })
+      .eq("id", requestId)
+      .not("lifecycle_stage", "in", "(completed,archived)")
+      .select("id")
+      .maybeSingle();
+    lifecycleAdvanced = Boolean(advancedRequest);
   }
 
   const { error: activityError } = await serviceClient.from("request_activity_log").insert({

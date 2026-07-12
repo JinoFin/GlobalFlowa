@@ -8,6 +8,9 @@ In **Authentication → Providers → Email**:
 
 - Enable email/password signup.
 - Enable **Confirm email**.
+- Configure secure password requirements at least as strong as the application rule: 10 characters with uppercase, lowercase, and numeric characters.
+- Enable Supabase leaked-password protection when available for the production plan; the read-only pre-deployment advisor reported it disabled.
+- Keep self-signup enabled; Globalflowa customer accounts do not require an admin invitation or approval.
 - Do not enable automatic confirmation through application code or service-role credentials.
 
 ## URL configuration
@@ -30,6 +33,12 @@ Do not add wildcard production redirects. The application callback separately re
 
 ## Email delivery
 
-Production verification and password-reset email delivery should use custom SMTP with a verified Globalflowa sending domain. Configure SMTP credentials in Supabase-managed secrets only. Never commit SMTP usernames, passwords, provider keys, or recovery/verification tokens.
+Production verification and password-reset email delivery must use custom SMTP with a verified Globalflowa sending domain. Configure SMTP credentials in Supabase-managed secrets only. Never commit SMTP usernames, passwords, provider keys, or recovery/verification tokens.
+
+- Use a customer-recognizable sender name and address on the verified domain.
+- Configure SPF, DKIM, and DMARC through the chosen email provider and DNS host.
+- Review the verification and password-reset templates for correct Globalflowa branding and links.
+- Test verification, reset delivery, expiry, and spam placement before public launch.
+- Store any related Vercel values in encrypted project settings; do not put values in source control.
 
 After configuration, test signup confirmation and password recovery end to end with a non-privileged customer account before production acceptance.

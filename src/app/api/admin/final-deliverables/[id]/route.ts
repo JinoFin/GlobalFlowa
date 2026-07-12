@@ -33,8 +33,19 @@ export async function PATCH(request: Request, { params }: Context) {
   const unchanged = publishing ? file.customer_visible && Boolean(file.published_at) : !file.customer_visible && !file.published_at;
   if (unchanged) return NextResponse.json({ ok: true, unchanged: true });
   const now = new Date().toISOString();
-  const { error } = await serviceClient.from("request_files").update({ customer_visible: publishing, published_at: publishing ? now : null, published_by: publishing ? user.id : null }).eq("id", id).eq("request_id", file.request_id).eq("is_final_deliverable", true).is("deleted_at", null);
+  let updateQuery = serviceClient
+    .from("request_files")
+    .update({ customer_visible: publishing, published_at: publishing ? now : null, published_by: publishing ? user.id : null })
+    .eq("id", id)
+    .eq("request_id", file.request_id)
+    .eq("is_final_deliverable", true)
+    .is("deleted_at", null);
+  updateQuery = publishing
+    ? updateQuery.eq("customer_visible", false).is("published_at", null)
+    : updateQuery.eq("customer_visible", true).not("published_at", "is", null);
+  const { data: updated, error } = await updateQuery.select("id").maybeSingle();
   if (error) return NextResponse.json({ error: "Could not update publication state." }, { status: 500 });
+  if (!updated) return NextResponse.json({ ok: true, unchanged: true });
 
   await serviceClient.from("request_activity_log").insert({ request_id: file.request_id, actor_id: user.id, actor_type: "admin", action: publishing ? "final_deliverable_published" : "final_deliverable_unpublished", details: { file_id: id, title: file.title, category: file.file_category, previous_state: publishing ? "draft" : "published", new_state: publishing ? "published" : "unpublished" } });
   return NextResponse.json({ ok: true });
@@ -56,11 +67,20 @@ export async function DELETE(request: Request, { params }: Context) {
     return NextResponse.json({ error: "Could not delete the stored file." }, { status: 500 });
   }
   const now = new Date().toISOString();
-  const { error } = await serviceClient.from("request_files").update({ customer_visible: false, published_at: null, published_by: null, deleted_at: now, deleted_by: user.id }).eq("id", id).eq("request_id", file.request_id).eq("is_final_deliverable", true);
+  const { data: deleted, error } = await serviceClient
+    .from("request_files")
+    .update({ customer_visible: false, published_at: null, published_by: null, deleted_at: now, deleted_by: user.id })
+    .eq("id", id)
+    .eq("request_id", file.request_id)
+    .eq("is_final_deliverable", true)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
   if (error) {
     console.error("Final deliverable metadata deletion failed after object removal", { fileId: id, requestId: file.request_id, reason: error.message });
     return NextResponse.json({ error: "The file was removed, but its record could not be finalized." }, { status: 500 });
   }
+  if (!deleted) return NextResponse.json({ ok: true, unchanged: true });
   await serviceClient.from("request_activity_log").insert({ request_id: file.request_id, actor_id: user.id, actor_type: "admin", action: "final_deliverable_deleted", details: { file_id: id, title: file.title, category: file.file_category } });
   return NextResponse.json({ ok: true });
 }

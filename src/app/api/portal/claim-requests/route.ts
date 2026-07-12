@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { claimRequestsForCurrentCustomer } from "@/lib/portal/claim-requests";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { hasTrustedMutationOrigin } from "@/lib/http/security";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  if (!origin || origin !== new URL(request.url).origin) {
+  if (!hasTrustedMutationOrigin(request)) {
     return NextResponse.json({ success: false, error: "Request not allowed." }, { status: 403 });
   }
   if (Number(request.headers.get("content-length") ?? "0") > 0) {

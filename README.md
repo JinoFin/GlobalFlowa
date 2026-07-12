@@ -1,4 +1,4 @@
-# Globalflowa MVP + Phase 3C Document Review Queue
+# Globalflowa customer lifecycle portal
 
 Professional B2B website and service request portal for Globalflowa, a Germany market-entry, compliance, warehouse, labeling, packing, and marketplace preparation partner for foreign sellers.
 
@@ -11,6 +11,10 @@ Publishing a deliverable does not complete a request or change its lifecycle sta
 Phase 6F adds atomic staff-only completion, reopening, archive, and restore actions. Completion requires a customer-facing note and recomputes checklist, review, task, customer-action, deliverable, and lifecycle warnings on the server; warnings require a second explicit confirmation and cannot be supplied by the browser. The optional completion summary is staff-only. Archive never deletes data, removes requests from active admin queues, preserves published final-document downloads, and makes customer uploads read-only until restoration or reopening. Manual lifecycle editing cannot enter or leave terminal states.
 
 Admin requests default to Active with explicit Completed, Archived, and All views; the workboard and operational alerts exclude completed and archived requests. The customer dashboard separates action-required, in-progress, recently completed, final-document, and archived requests. Portal queries select only customer-safe completion/archive fields and never select staff actor IDs, the internal completion summary, assignments, priorities, deadlines, tasks, or internal notes.
+
+Phase 6 adds verified self-signup without admin approval, password recovery, personal/company profiles, verified-email request claiming, customer lifecycle tracking, secure final deliverables, completion/reopening, archive/restore, and the customer dashboard. Request access is now based only on `customer_user_id = auth.uid()` after the secure claim flow; the legacy email-fallback RLS behavior is removed by the consolidated migration. Shared-mailbox users should understand that the one verified account can claim every still-unowned request addressed to that exact normalized email.
+
+Production deployment must follow [the Phase 6 deployment runbook](docs/phase6-deployment-runbook.md). Apply only `supabase/migrations/202607110002_phase6_customer_lifecycle.sql` before pushing the Phase 6 application commits. Never use `supabase/schema.sql` as a production migration. The [security audit](docs/phase6-security-audit.md), [Auth/SMTP configuration](docs/supabase-auth-configuration.md), and [live acceptance checklist](docs/live-qa-checklist.md) record the remaining manual release work.
 
 ## Phase 1 scope
 
@@ -74,10 +78,10 @@ Admin Phase 3A updates:
 
 Customer account linking:
 
-- MVP linking uses Option A: a signed-in customer can read requests where `service_requests.customer_user_id` equals the auth user ID, or where `service_requests.customer_email`/`email` matches the auth user email.
-- The portal attempts a server-side auto-link by email when a customer opens their requests, but the email-based RLS policy already allows access when the email matches.
+- Phase 3A originally used an email-fallback policy. Phase 6 replaces it with a verified server/database claim that links only unowned requests addressed to the authenticated, confirmed login email.
+- After linking, customer RLS requires `service_requests.customer_user_id = auth.uid()`; browser-supplied email or user IDs are never trusted and existing ownership is never overwritten.
 - Customers cannot change checklist status directly. They can only upload files or add customer notes through `/api/portal/upload`.
-- If a customer submitted a request with a different email address, an admin should update `customer_email` or link `customer_user_id` after verifying the customer.
+- Requests submitted with another email remain unclaimed. Complex company membership and reassignment are outside Phase 6.
 
 Phase 3A schema changes:
 

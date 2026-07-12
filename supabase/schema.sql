@@ -349,8 +349,56 @@ alter table public.request_files add constraint request_files_file_category_chec
 alter table public.request_files drop constraint if exists request_files_publication_state_check;
 alter table public.request_files add constraint request_files_publication_state_check check ((customer_visible = false and published_at is null and published_by is null) or (customer_visible = true and is_final_deliverable = true and published_at is not null and published_by is not null and deleted_at is null));
 
+create or replace function public.enforce_customer_upload_active_request()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare request_stage text;
+begin
+  if new.uploaded_by_role <> 'customer' then return new; end if;
+  select requests.lifecycle_stage into request_stage
+  from public.service_requests as requests
+  where requests.id = new.request_id
+  for update;
+  if request_stage in ('completed', 'archived') then
+    raise exception 'request is not accepting customer uploads' using errcode = '55000';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.enforce_customer_upload_active_request() from public, anon, authenticated;
+drop trigger if exists enforce_customer_upload_active_request on public.request_files;
+create trigger enforce_customer_upload_active_request before insert on public.request_files
+for each row execute function public.enforce_customer_upload_active_request();
+
 alter table public.request_document_checklist add column if not exists customer_visible boolean not null default true;
 alter table public.request_document_checklist add column if not exists admin_note_customer_visible boolean not null default false;
+
+create or replace view public.customer_request_checklist
+with (security_invoker = true)
+as
+select
+  checklist.id,
+  checklist.request_id,
+  checklist.document_key,
+  checklist.title,
+  checklist.description,
+  checklist.category,
+  checklist.status,
+  case when checklist.admin_note_customer_visible then checklist.admin_note else null end as admin_note,
+  checklist.admin_note_customer_visible,
+  checklist.customer_note,
+  checklist.linked_file_id,
+  checklist.required,
+  checklist.sort_order
+from public.request_document_checklist as checklist
+where checklist.customer_visible = true;
+
+revoke all on public.customer_request_checklist from public, anon;
+grant select on public.customer_request_checklist to authenticated;
 
 alter table public.admin_notes add column if not exists customer_visible boolean not null default false;
 
@@ -420,32 +468,62 @@ alter table public.customer_companies enable row level security;
 grant select on public.services to anon, authenticated;
 grant select on public.service_questions to anon, authenticated;
 grant select, insert, update, delete on public.profiles to authenticated;
+revoke all on public.profiles from anon;
 revoke update on public.profiles from authenticated;
 grant update (full_name, phone, job_title, preferred_language, timezone, updated_at) on public.profiles to authenticated;
 grant select, insert, update, delete on public.service_requests to authenticated;
+revoke all on public.service_requests from anon;
 grant select, insert, update, delete on public.request_services to authenticated;
+revoke all on public.request_services from anon;
 grant select, insert, update, delete on public.request_answers to authenticated;
+revoke all on public.request_answers from anon;
 grant select, insert, update, delete on public.request_files to authenticated;
+revoke all on public.request_files from anon;
 grant select, insert, update, delete on public.document_templates to authenticated;
 grant select, insert, update, delete on public.request_document_checklist to authenticated;
+revoke all on public.request_document_checklist from anon;
 grant select, insert, update, delete on public.recommendation_sessions to authenticated;
 grant select, insert, update, delete on public.recommendation_answers to authenticated;
 grant select, insert, update, delete on public.admin_notes to authenticated;
+revoke all on public.admin_notes from anon;
 revoke all on public.customer_messages from anon, authenticated;
 grant select, insert, update on public.customer_messages to authenticated;
 grant select, insert, update, delete on public.request_activity_log to authenticated;
+revoke all on public.request_activity_log from anon;
 revoke all on public.customer_account_activity from anon, authenticated;
 grant select on public.customer_account_activity to authenticated;
 revoke all on public.customer_companies from anon, authenticated;
 grant select, insert, update on public.customer_companies to authenticated;
 revoke all on public.internal_tasks from anon, authenticated;
 grant select, insert, update, delete on public.internal_tasks to authenticated;
+revoke all on public.internal_tasks from anon;
+
+create or replace function public.current_user_role()
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select profiles.role::text from public.profiles as profiles
+  where profiles.id = auth.uid() limit 1;
+$$;
+
+create or replace function public.current_user_is_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.profiles as profiles where profiles.id = auth.uid() and profiles.role = 'admin');
+$$;
+
+create or replace function public.current_user_is_admin_or_team()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.profiles as profiles where profiles.id = auth.uid() and profiles.role in ('admin', 'team'));
+$$;
 
 create or replace function public.is_admin()
 returns boolean
 language sql
 security definer
-set search_path = public
+set search_path = ''
 stable
 as $$
   select exists (
@@ -460,7 +538,7 @@ create or replace function public.is_admin_or_team()
 returns boolean
 language sql
 security definer
-set search_path = public
+set search_path = ''
 stable
 as $$
   select exists (
@@ -471,8 +549,14 @@ as $$
   );
 $$;
 
-revoke all on function public.is_admin() from public;
-revoke all on function public.is_admin_or_team() from public;
+revoke all on function public.current_user_role() from public, anon;
+revoke all on function public.current_user_is_admin() from public, anon;
+revoke all on function public.current_user_is_admin_or_team() from public, anon;
+revoke all on function public.is_admin() from public, anon;
+revoke all on function public.is_admin_or_team() from public, anon;
+grant execute on function public.current_user_role() to authenticated;
+grant execute on function public.current_user_is_admin() to authenticated;
+grant execute on function public.current_user_is_admin_or_team() to authenticated;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_admin_or_team() to authenticated;
 
@@ -610,10 +694,7 @@ on public.service_requests for select
 to authenticated
 using (
   public.is_verified_customer()
-  and request_files.deleted_at is null
-  and ((request_files.uploaded_by_role = 'customer' and request_files.is_final_deliverable = false) or (request_files.is_final_deliverable = true and request_files.customer_visible = true and request_files.published_at is not null))
-  and
-  customer_access_enabled = true
+  and customer_access_enabled = true
   and customer_user_id = (select auth.uid())
 );
 
@@ -674,6 +755,11 @@ on public.request_files for select
 to authenticated
 using (
   public.is_verified_customer()
+  and deleted_at is null
+  and (
+    (uploaded_by_role = 'customer' and is_final_deliverable = false)
+    or (is_final_deliverable = true and customer_visible = true and published_at is not null)
+  )
   and
   exists (
     select 1 from public.service_requests sr
@@ -805,9 +891,9 @@ begin
   insert into public.profiles (id, email, role, created_at, updated_at)
   values (new.id, new.email, 'customer', now(), now())
   on conflict (id) do update
-  set email = excluded.email, role = 'customer', updated_at = now();
+  set email = excluded.email, updated_at = now();
   insert into public.customer_account_activity (user_id, event, details)
-  values (new.id, 'customer_signed_up', jsonb_build_object('email', new.email));
+  values (new.id, 'customer_signed_up', '{}'::jsonb);
   return new;
 end;
 $$;
@@ -825,7 +911,9 @@ where not exists (select 1 from public.profiles where profiles.id = users.id);
 create or replace function public.log_customer_email_verification()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
-  if old.email_confirmed_at is null and new.email_confirmed_at is not null then
+  if old.email_confirmed_at is null
+     and new.email_confirmed_at is not null
+     and exists (select 1 from public.profiles as profiles where profiles.id = new.id and profiles.role = 'customer') then
     insert into public.customer_account_activity (user_id, event) values (new.id, 'customer_email_verified');
   end if;
   return new;
@@ -895,6 +983,23 @@ $$;
 
 revoke all on function public.claim_requests_for_current_customer() from public, anon;
 grant execute on function public.claim_requests_for_current_customer() to authenticated;
+
+create or replace function public.update_request_lifecycle_stage(p_request_id uuid, p_lifecycle_stage text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare actor_id uuid := auth.uid(); request_row public.service_requests%rowtype; changed_at timestamptz := now();
+begin
+  if actor_id is null or not exists (select 1 from public.profiles as profiles where profiles.id=actor_id and profiles.role in ('admin','team')) then raise exception 'staff authorization required' using errcode='42501'; end if;
+  if p_lifecycle_stage not in ('received','initial_review','waiting_for_documents','document_review','processing','external_processing','final_review') then raise exception 'invalid lifecycle stage' using errcode='22023'; end if;
+  select * into request_row from public.service_requests where id=p_request_id for update;
+  if not found then raise exception 'request not found' using errcode='P0002'; end if;
+  if request_row.lifecycle_stage in ('completed','archived') then raise exception 'terminal lifecycle requires a dedicated action' using errcode='22023'; end if;
+  if request_row.lifecycle_stage=p_lifecycle_stage then return jsonb_build_object('ok',true,'unchanged',true,'stage',request_row.lifecycle_stage); end if;
+  update public.service_requests set lifecycle_stage=p_lifecycle_stage,lifecycle_stage_updated_at=changed_at,lifecycle_stage_updated_by=actor_id,updated_at=changed_at where id=p_request_id;
+  insert into public.request_activity_log(request_id,actor_id,actor_type,action,details) values(p_request_id,actor_id,'admin','lifecycle_stage_changed',jsonb_build_object('previous_stage',request_row.lifecycle_stage,'new_stage',p_lifecycle_stage,'changed_at',changed_at));
+  return jsonb_build_object('ok',true,'stage',p_lifecycle_stage,'updated_at',changed_at);
+end; $$;
+revoke all on function public.update_request_lifecycle_stage(uuid,text) from public,anon;
+grant execute on function public.update_request_lifecycle_stage(uuid,text) to authenticated;
 
 create or replace function public.perform_request_lifecycle_action(
   p_request_id uuid, p_action text, p_customer_completion_note text default null,
@@ -984,6 +1089,7 @@ insert into storage.buckets (id, name, public)
 values ('request-documents', 'request-documents', false)
 on conflict (id) do nothing;
 
+drop policy if exists "Admins can read request documents" on storage.objects;
 create policy "Admins can read request documents"
 on storage.objects for select
 to authenticated

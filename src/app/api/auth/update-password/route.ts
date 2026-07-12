@@ -3,10 +3,14 @@ import { NextResponse } from "next/server";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { passwordConfirmationSchema } from "@/lib/auth/validation";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { hasTrustedMutationOrigin } from "@/lib/http/security";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!hasTrustedMutationOrigin(request)) {
+    return NextResponse.json({ ok: false, message: "Request not allowed." }, { status: 403 });
+  }
   const parsed = passwordConfirmationSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(

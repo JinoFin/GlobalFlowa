@@ -125,10 +125,10 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
         .eq("customer_user_id", user.id)
         .maybeSingle(),
       supabase.from("request_services").select("service_name, service_slug").eq("request_id", id),
-      supabase.from("request_answers").select("*").eq("request_id", id).order("created_at"),
-      supabase.from("request_files").select("id, file_name, uploaded_by_role, linked_checklist_item_id, customer_note, created_at").eq("request_id", id).order("created_at", { ascending: false }),
+      supabase.from("request_answers").select("id, scope, service_slug, question_key, answer").eq("request_id", id).order("created_at"),
+      supabase.from("request_files").select("id, file_name, uploaded_by_role, linked_checklist_item_id, customer_note, created_at").eq("request_id", id).eq("uploaded_by_role", "customer").eq("is_final_deliverable", false).is("deleted_at", null).order("created_at", { ascending: false }),
       supabase
-        .from("request_document_checklist")
+        .from("customer_request_checklist")
         .select("id, document_key, title, description, category, status, admin_note, admin_note_customer_visible, customer_note, linked_file_id, required, sort_order")
         .eq("request_id", id)
         .order("sort_order"),

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { activeLifecycleStages, lifecycleStages } from "@/lib/request-lifecycle";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
+import { hasTrustedMutationOrigin } from "@/lib/http/security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,8 +22,7 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  if (!hasTrustedMutationOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   let supabase;
   try { supabase = await createSupabaseServerClient(); }
   catch { return NextResponse.json({ error: "Request lifecycle actions are not configured." }, { status: 503 }); }

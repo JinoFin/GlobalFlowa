@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     .from("service_requests")
     .insert({
       status: "New",
-      priority: payload.customer.urgency ?? "Standard",
+      priority: requestPriorityFromUrgency(payload.customer.urgency),
       company_name: payload.customer.company_name,
       contact_person: payload.customer.contact_person,
       email: payload.customer.email,
@@ -336,6 +336,13 @@ function isRateLimited(ip: string) {
   current.count += 1;
   attempts.set(ip, current);
   return current.count > rateLimitMax;
+}
+
+function requestPriorityFromUrgency(urgency: string | undefined) {
+  const normalized = urgency?.trim().toLowerCase();
+  if (normalized === "urgent" || normalized === "authority deadline") return "urgent";
+  if (normalized === "soon") return "high";
+  return "normal";
 }
 
 async function loadDocumentTemplatesForRequest(

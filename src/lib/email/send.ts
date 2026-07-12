@@ -1,5 +1,6 @@
 import "server-only";
 
+import "server-only";
 import { Resend } from "resend";
 import { getServiceBySlug } from "@/lib/catalog";
 import { groupChecklistByCategory, type GeneratedChecklistItem } from "@/lib/document-checklist";

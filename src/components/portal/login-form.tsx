@@ -42,8 +42,8 @@ export function PortalLoginForm({ initialMessage }: { initialMessage?: string })
       const claimedCount = claimResult.claimed_count ?? 0;
       router.push(claimedCount > 0 ? `/portal/requests?linked=${claimedCount}` : "/portal/requests");
       router.refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Login failed.");
+    } catch {
+      setMessage("Email or password is incorrect, or the account is not ready to sign in.");
     } finally {
       setIsLoading(false);
     }

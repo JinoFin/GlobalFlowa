@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { portalProfileSchema } from "@/lib/portal/profile-validation";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
+import { hasTrustedMutationOrigin } from "@/lib/http/security";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!hasTrustedMutationOrigin(request)) {
+    return NextResponse.json({ ok: false, message: "Request not allowed." }, { status: 403 });
+  }
   let supabase;
   try {
     supabase = await createSupabaseServerClient();

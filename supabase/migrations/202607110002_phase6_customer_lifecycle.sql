@@ -1,5 +1,5 @@
--- Phase 6A-6F: customer lifecycle, verified access, profiles, request linking,
--- lifecycle progress, secure final deliverables, completion, and archiving.
+-- Phase 6A-6G: customer lifecycle, verified access, profiles, request linking,
+-- lifecycle progress, secure final deliverables, completion, archiving, and readiness hardening.
 -- This migration is additive/idempotent and does not change existing admin or team roles.
 
 create table if not exists public.customer_account_activity (
@@ -18,6 +18,85 @@ alter table public.profiles add column if not exists phone text;
 alter table public.profiles add column if not exists job_title text;
 alter table public.profiles add column if not exists preferred_language text;
 alter table public.profiles add column if not exists timezone text;
+
+-- Replace the Phase 5 role helpers with fixed-path equivalents before any new
+-- policy depends on them. The legacy names remain because existing policies use
+-- both naming conventions.
+create or replace function public.current_user_role()
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select profiles.role::text
+  from public.profiles as profiles
+  where profiles.id = auth.uid()
+  limit 1;
+$$;
+
+create or replace function public.current_user_is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.profiles as profiles
+    where profiles.id = auth.uid() and profiles.role = 'admin'
+  );
+$$;
+
+create or replace function public.current_user_is_admin_or_team()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.profiles as profiles
+    where profiles.id = auth.uid() and profiles.role in ('admin', 'team')
+  );
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.profiles as profiles
+    where profiles.id = auth.uid() and profiles.role = 'admin'
+  );
+$$;
+
+create or replace function public.is_admin_or_team()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.profiles as profiles
+    where profiles.id = auth.uid() and profiles.role in ('admin', 'team')
+  );
+$$;
+
+revoke all on function public.current_user_role() from public, anon;
+revoke all on function public.current_user_is_admin() from public, anon;
+revoke all on function public.current_user_is_admin_or_team() from public, anon;
+revoke all on function public.is_admin() from public, anon;
+revoke all on function public.is_admin_or_team() from public, anon;
+grant execute on function public.current_user_role() to authenticated;
+grant execute on function public.current_user_is_admin() to authenticated;
+grant execute on function public.current_user_is_admin_or_team() to authenticated;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_admin_or_team() to authenticated;
 
 alter table public.service_requests add column if not exists lifecycle_stage text not null default 'received';
 alter table public.service_requests add column if not exists lifecycle_stage_updated_at timestamptz;
@@ -61,6 +140,38 @@ alter table public.request_files add constraint request_files_publication_state_
 create index if not exists idx_request_files_published_deliverables
 on public.request_files(request_id, published_at desc)
 where is_final_deliverable = true and customer_visible = true and published_at is not null and deleted_at is null;
+
+create or replace function public.enforce_customer_upload_active_request()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  request_stage text;
+begin
+  if new.uploaded_by_role <> 'customer' then
+    return new;
+  end if;
+
+  select requests.lifecycle_stage
+  into request_stage
+  from public.service_requests as requests
+  where requests.id = new.request_id
+  for update;
+
+  if request_stage in ('completed', 'archived') then
+    raise exception 'request is not accepting customer uploads' using errcode = '55000';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.enforce_customer_upload_active_request() from public, anon, authenticated;
+drop trigger if exists enforce_customer_upload_active_request on public.request_files;
+create trigger enforce_customer_upload_active_request
+before insert on public.request_files
+for each row execute function public.enforce_customer_upload_active_request();
 update public.service_requests set lifecycle_stage = case status
   when 'New' then 'received' when 'In Review' then 'initial_review'
   when 'Missing Documents' then 'waiting_for_documents' when 'Waiting for Customer' then 'waiting_for_documents'
@@ -97,6 +208,42 @@ create index if not exists idx_customer_companies_owner_user_id on public.custom
 alter table public.customer_companies enable row level security;
 revoke all on public.customer_companies from anon, authenticated;
 grant select, insert, update on public.customer_companies to authenticated;
+
+create or replace view public.customer_request_checklist
+with (security_invoker = true)
+as
+select
+  checklist.id,
+  checklist.request_id,
+  checklist.document_key,
+  checklist.title,
+  checklist.description,
+  checklist.category,
+  checklist.status,
+  case when checklist.admin_note_customer_visible then checklist.admin_note else null end as admin_note,
+  checklist.admin_note_customer_visible,
+  checklist.customer_note,
+  checklist.linked_file_id,
+  checklist.required,
+  checklist.sort_order
+from public.request_document_checklist as checklist
+where checklist.customer_visible = true;
+
+revoke all on public.customer_request_checklist from public, anon;
+grant select on public.customer_request_checklist to authenticated;
+
+-- Remove legacy default privileges from protected Phase 5 tables. Staff and
+-- customer capabilities continue through authenticated grants plus RLS.
+revoke all on public.profiles from anon;
+revoke all on public.service_requests from anon;
+revoke all on public.request_services from anon;
+revoke all on public.request_answers from anon;
+revoke all on public.request_files from anon;
+revoke all on public.request_document_checklist from anon;
+revoke all on public.admin_notes from anon;
+revoke all on public.customer_messages from anon;
+revoke all on public.request_activity_log from anon;
+revoke all on public.internal_tasks from anon;
 
 revoke update on public.profiles from authenticated;
 grant update (full_name, phone, job_title, preferred_language, timezone, updated_at) on public.profiles to authenticated;
@@ -226,10 +373,10 @@ begin
   insert into public.profiles (id, email, role, created_at, updated_at)
   values (new.id, new.email, 'customer', now(), now())
   on conflict (id) do update
-  set email = excluded.email, role = 'customer', updated_at = now();
+  set email = excluded.email, updated_at = now();
 
   insert into public.customer_account_activity (user_id, event, details)
-  values (new.id, 'customer_signed_up', jsonb_build_object('email', new.email));
+  values (new.id, 'customer_signed_up', '{}'::jsonb);
   return new;
 end;
 $$;
@@ -253,7 +400,9 @@ security definer
 set search_path = ''
 as $$
 begin
-  if old.email_confirmed_at is null and new.email_confirmed_at is not null then
+  if old.email_confirmed_at is null
+     and new.email_confirmed_at is not null
+     and exists (select 1 from public.profiles as profiles where profiles.id = new.id and profiles.role = 'customer') then
     insert into public.customer_account_activity (user_id, event, details)
     values (new.id, 'customer_email_verified', '{}'::jsonb);
   end if;
@@ -347,6 +496,65 @@ $$;
 
 revoke all on function public.claim_requests_for_current_customer() from public, anon;
 grant execute on function public.claim_requests_for_current_customer() to authenticated;
+
+create or replace function public.update_request_lifecycle_stage(
+  p_request_id uuid,
+  p_lifecycle_stage text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  actor_id uuid := auth.uid();
+  request_row public.service_requests%rowtype;
+  changed_at timestamptz := now();
+begin
+  if actor_id is null or not exists (
+    select 1 from public.profiles as profiles
+    where profiles.id = actor_id and profiles.role in ('admin', 'team')
+  ) then
+    raise exception 'staff authorization required' using errcode = '42501';
+  end if;
+  if p_lifecycle_stage not in ('received','initial_review','waiting_for_documents','document_review','processing','external_processing','final_review') then
+    raise exception 'invalid lifecycle stage' using errcode = '22023';
+  end if;
+
+  select * into request_row
+  from public.service_requests
+  where id = p_request_id
+  for update;
+  if not found then raise exception 'request not found' using errcode = 'P0002'; end if;
+  if request_row.lifecycle_stage in ('completed', 'archived') then
+    raise exception 'terminal lifecycle requires a dedicated action' using errcode = '22023';
+  end if;
+  if request_row.lifecycle_stage = p_lifecycle_stage then
+    return jsonb_build_object('ok', true, 'unchanged', true, 'stage', request_row.lifecycle_stage);
+  end if;
+
+  update public.service_requests
+  set lifecycle_stage = p_lifecycle_stage,
+      lifecycle_stage_updated_at = changed_at,
+      lifecycle_stage_updated_by = actor_id,
+      updated_at = changed_at
+  where id = p_request_id;
+
+  insert into public.request_activity_log (request_id, actor_id, actor_type, action, details)
+  values (
+    p_request_id,
+    actor_id,
+    'admin',
+    'lifecycle_stage_changed',
+    jsonb_build_object('previous_stage', request_row.lifecycle_stage, 'new_stage', p_lifecycle_stage, 'changed_at', changed_at)
+  );
+
+  return jsonb_build_object('ok', true, 'stage', p_lifecycle_stage, 'updated_at', changed_at);
+end;
+$$;
+
+revoke all on function public.update_request_lifecycle_stage(uuid,text) from public, anon;
+grant execute on function public.update_request_lifecycle_stage(uuid,text) to authenticated;
 
 create or replace function public.perform_request_lifecycle_action(
   p_request_id uuid, p_action text, p_customer_completion_note text default null,

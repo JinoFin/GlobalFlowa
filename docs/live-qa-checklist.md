@@ -30,6 +30,8 @@ Security note:
 
 ## Before QA
 
+- For the Phase 6 release, follow `docs/phase6-deployment-runbook.md`: apply only `supabase/migrations/202607110002_phase6_customer_lifecycle.sql` before deploying the seven Phase 6 commits. Do not run `schema.sql` on the existing production project.
+- Complete `docs/supabase-auth-configuration.md`, including confirmed-email signup, exact production redirects, custom SMTP, and sender-domain DNS authentication.
 - Confirm Vercel has all environment variables for the tested environment.
 - For new Supabase projects, confirm `schema.sql` and `seed.sql` have been run.
 - For existing Phase 2C live projects, confirm `supabase/migrations/202607100001_phase3a_customer_portal_live_fix.sql` has been run before Phase 3A QA.
@@ -380,7 +382,9 @@ Record the tested deployment URL, Git commit, tester, date, and result before ma
 12. Log in as a customer and confirm the portal HTML/data contains no staff names, assignments, internal deadlines, priorities, or tasks; direct calls to both Phase 5 admin APIs return forbidden/unauthorized.
 13. Re-test customer messaging, upload/replacement, protected downloads, document review acceptance/rejection, and existing admin checklist updates.
 
-## Deployment Runbook
+## Historical Phase 5 Deployment Runbook
+
+This section is retained as Phase 5 history. Use `docs/phase6-deployment-runbook.md` for the next production release.
 
 1. **Pull latest main:** confirm a clean worktree, fetch origin, and run `git pull --ff-only origin main`.
 2. **Verify locally:** run `npm run lint`, `npm run build`, `git diff --check`, and `npm audit --audit-level=moderate` when registry access is available.
@@ -397,5 +401,80 @@ Record the tested deployment URL, Git commit, tester, date, and result before ma
 - Applied live: `202607100002_phase3b_customer_messages.sql` — Phase 3B structured customer messages.
 - Phase 3C: no migration required.
 - Phase 4A–4E MVP completion sprint: no migration required.
-- Pending manual application before Phase 5 deploy: `202607110001_phase5_operations_management.sql` — ownership/deadlines, priority hardening, staff-read policy, and admin/team-only internal tasks.
+- Present in the inspected live Phase 5 schema: ownership/deadlines, priority hardening, staff-read policy, and admin/team-only internal tasks from `202607110001_phase5_operations_management.sql`.
+- Pending Phase 6 release: `202607110002_phase6_customer_lifecycle.sql` — apply this consolidated migration once, before pushing Phase 6 application commits.
 - Permanent safety rule: never run `supabase/schema.sql` on the existing live Supabase project.
+
+## Phase 6 Final Acceptance Record
+
+Run this only after the consolidated migration, Auth URLs, and custom SMTP are configured. Record `Pass`, `Fail`, or `Blocked` plus an evidence link/reference in the Result column.
+
+| # | Manual step | Expected result | Result |
+| ---: | --- | --- | --- |
+| 1 | Open `/portal/signup`. | Public signup form loads. | — |
+| 2 | Submit a compliant new customer password. | Account is created without admin approval. | — |
+| 3 | Check the customer mailbox. | Verification email arrives from the approved Globalflowa sender. | — |
+| 4 | Attempt portal access before verification. | Protected customer data is denied. | — |
+| 5 | Click the verification link. | Supabase code exchange succeeds once. | — |
+| 6 | Observe the callback redirect. | Redirect ends at an approved internal portal route with no code/token shown. | — |
+| 7 | Inspect the new profile. | Role is `customer`. | — |
+| 8 | Attempt privileged signup metadata/inputs. | Admin/team/internal roles cannot be created. | — |
+| 9 | Request password recovery for existing and unknown emails. | Both receive the same generic response. | — |
+| 10 | Check the existing-account mailbox. | Recovery email arrives. | — |
+| 11 | Follow the valid recovery link and update the password. | Password changes through Supabase Auth. | — |
+| 12 | Reuse an expired/invalid recovery link. | Update fails safely without provider details. | — |
+| 13 | Update Customer A personal profile. | Only allowed personal fields persist. | — |
+| 14 | Update Customer A company profile. | One owned company row is inserted/updated. | — |
+| 15 | Review login and business emails. | Login email is read-only and distinct from business contact email. | — |
+| 16 | Attempt Customer A access to Customer B profile/company. | Read and mutation are denied. | — |
+| 17 | Open admin request detail. | Safe customer profile/company summary appears without Auth secrets. | — |
+| 18 | Create a guest request with Customer A email. | Request is accepted. | — |
+| 19 | Inspect ownership before signup. | `customer_user_id` is null. | — |
+| 20 | Verify Customer A with the exact normalized email. | Claim flow becomes eligible. | — |
+| 21 | Enter the portal. | Unowned matching request links to Customer A. | — |
+| 22 | Repeat the claim action. | Claimed count is zero and no duplicate activity is created. | — |
+| 23 | Attempt claim/view as Customer B. | Access is denied and ownership is unchanged. | — |
+| 24 | Test an already-owned request. | Existing ownership is never overwritten. | — |
+| 25 | Change lifecycle as admin/team. | Valid non-terminal stage persists and logs once. | — |
+| 26 | View the request as its customer. | Safe lifecycle label, progress, and next action appear. | — |
+| 27 | Inspect portal HTML/data. | Staff actors, assignments, priorities, deadlines, tasks, summaries, and internal notes are absent. | — |
+| 28 | Send a missing-document message. | Lifecycle moves to `waiting_for_documents` only when configured by the workflow. | — |
+| 29 | Upload the requested file. | Checklist moves under review and lifecycle may move to `document_review`. | — |
+| 30 | Repeat automation on completed/archived requests. | Terminal stages are not overwritten. | — |
+| 31 | Upload a final deliverable as draft. | Staff sees draft; customer does not. | — |
+| 32 | Guess the draft download ID as customer. | Generic denial is returned. | — |
+| 33 | Publish the deliverable. | Publication state and one activity entry persist. | — |
+| 34 | View/download as owning customer. | Metadata appears and secure download succeeds. | — |
+| 35 | Request the file as Customer B. | Generic denial is returned. | — |
+| 36 | Reuse the signed URL after expiry. | URL no longer works. | — |
+| 37 | Unpublish the deliverable. | Customer metadata/download access is removed; object remains internal. | — |
+| 38 | Try the old customer link after unpublish. | Access is denied after signed URL expiry and no new URL is issued. | — |
+| 39 | Delete the deliverable with confirmation. | Exact object is removed and metadata is soft-deleted. | — |
+| 40 | Re-test customer uploads and review queue. | Existing customer-document workflow is unaffected. | — |
+| 41 | Start completion with outstanding warnings. | Server returns the current warning set. | — |
+| 42 | Submit without warning confirmation. | Completion is prevented. | — |
+| 43 | Confirm warnings and provide the required customer note. | Request becomes completed and logs once. | — |
+| 44 | View completed request as customer. | Customer completion note and final-document state appear. | — |
+| 45 | Inspect customer output. | Internal completion summary remains absent. | — |
+| 46 | Attempt customer upload to completed request. | Server/database rejects it and orphan storage is cleaned up. | — |
+| 47 | Reopen as admin/team to a valid active stage. | Request resumes active lifecycle and logs once. | — |
+| 48 | Re-test active workflow. | Allowed customer mutations and next-action logic resume. | — |
+| 49 | Archive with explicit confirmation. | Request becomes archived without data deletion. | — |
+| 50 | Check active admin queues/metrics. | Archived request is excluded. | — |
+| 51 | View archived request as owner. | Read-only request remains visible. | — |
+| 52 | Download a published final file from archived request. | Authorized download remains available. | — |
+| 53 | Attempt archived customer upload/note mutation. | Mutation is rejected. | — |
+| 54 | Restore the request. | Recorded or validated target lifecycle returns. | — |
+| 55 | Inspect progress and next action. | Correct restored stage and action appear. | — |
+| 56 | Log in at `/admin/login`. | Existing admin/team login works. | — |
+| 57 | Log in at `/portal/login`. | Existing verified customer login works. | — |
+| 58 | Submit `/request` as guest and verified customer. | Guest remains unowned; authenticated request links to session user. | — |
+| 59 | Trigger configured notification/resend behavior. | Expected notifications send or fail safely with persisted state. | — |
+| 60 | Send and view customer messages. | Authorized message flow works. | — |
+| 61 | Upload/replace customer documents. | Private upload flow works. | — |
+| 62 | Review documents in admin. | Accept/reject queue and customer-safe correction reason work. | — |
+| 63 | Exercise assignments, deadlines, and internal tasks. | Phase 5 internal workflows work and remain customer-hidden. | — |
+| 64 | Open `/admin/workboard`. | Active workload data and filters work. | — |
+| 65 | Open `/admin/overview`. | Metrics exclude completed/archived where specified. | — |
+| 66 | Inspect Vercel runtime errors after the test run. | No new unhandled Phase 6 errors are present. | — |
+| 67 | Run cross-customer negative tests across requests, messages, checklist, files, profiles, and companies. | No Customer A/B data crossover occurs. | — |

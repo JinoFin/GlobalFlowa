@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasTrustedMutationOrigin } from "@/lib/http/security";
 
 export const finalDeliverableCategories = [
   "final_deliverable",
@@ -76,6 +77,5 @@ export function hasValidDeliverableStorage(requestId: string, bucket: string, pa
 }
 
 export function isSameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
+  return hasTrustedMutationOrigin(request);
 }

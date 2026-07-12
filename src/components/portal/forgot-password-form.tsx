@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { emailSchema } from "@/lib/auth/validation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getConfiguredSiteUrl } from "@/lib/auth/redirects";
 
 const genericSuccess = "If an account exists for this email, a password-reset link will be sent shortly.";
 
@@ -24,7 +25,7 @@ export function ForgotPasswordForm() {
     setIsLoading(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      const callbackUrl = new URL("/auth/callback", window.location.origin);
+      const callbackUrl = new URL("/auth/callback", getConfiguredSiteUrl());
       callbackUrl.searchParams.set("next", "/portal/update-password");
       await supabase.auth.resetPasswordForEmail(parsed.data, { redirectTo: callbackUrl.toString() });
     } finally {
