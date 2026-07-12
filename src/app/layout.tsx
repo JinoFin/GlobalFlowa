@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
+import { ApplicationChrome } from "@/components/application-chrome";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,9 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="flex min-h-full flex-col bg-white text-navy-950">
-        <SiteHeader />
-        <main className="flex-1">{children}</main>
-        <SiteFooter />
+        <ApplicationChrome>{children}</ApplicationChrome>
       </body>
     </html>
   );

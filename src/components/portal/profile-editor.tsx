@@ -109,5 +109,5 @@ function ProfileField({ label, name, value, error, type = "text", placeholder, o
 }
 
 function Feedback({ message, success }: { message: string; success: boolean }) {
-  return <p className={`md:col-span-2 rounded-md border p-3 text-sm ${success ? "border-teal-200 bg-teal-50 text-teal-800" : "border-red-200 bg-red-50 text-red-700"}`} role={success ? "status" : "alert"}>{message}</p>;
+  return <div className={`md:col-span-2 rounded-md border p-3 text-sm ${success ? "border-teal-200 bg-teal-50 text-teal-800" : "border-red-200 bg-red-50 text-red-700"}`} role={success ? "status" : "alert"}><p>{message}</p>{success ? <div className="mt-3 flex flex-wrap gap-4 font-semibold"><Link href="/portal">Return to Dashboard</Link><Link href="/request">Start New Request</Link></div> : null}</div>;
 }

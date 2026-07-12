@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   DocumentReviewQueue,
   type DocumentReviewQueueRow,
 } from "@/components/admin/document-review-queue";
-import { LogoutButton } from "@/components/admin/logout-button";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { isAdminUser } from "@/lib/supabase/roles";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
@@ -53,7 +51,7 @@ export default async function AdminDocumentReviewPage() {
       reason: error instanceof Error ? error.message : "unknown error",
     });
     return (
-      <DocumentReviewPageShell showLogout={false}>
+      <DocumentReviewPageShell>
         <DocumentReviewQueue
           initialRows={[]}
           initialError="Document review is not configured."
@@ -158,24 +156,13 @@ export default async function AdminDocumentReviewPage() {
   );
 }
 
-function DocumentReviewPageShell({
-  children,
-  showLogout = true,
-}: {
-  children: React.ReactNode;
-  showLogout?: boolean;
-}) {
+function DocumentReviewPageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="flex flex-wrap gap-4 text-sm font-semibold text-teal-700">
-              <Link href="/admin/overview">Overview</Link>
-              <Link href="/admin/requests">Requests</Link>
-              <Link href="/admin/workboard">Workboard</Link>
-            </div>
-            <p className="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
               Admin dashboard
             </p>
             <h1 className="mt-2 text-3xl font-semibold text-navy-950">Document Review</h1>
@@ -183,7 +170,6 @@ function DocumentReviewPageShell({
               Review the current customer upload for each checklist item, open its request, and accept it or request a correction.
             </p>
           </div>
-          {showLogout ? <LogoutButton /> : null}
         </div>
         <div className="mt-8">{children}</div>
       </div>

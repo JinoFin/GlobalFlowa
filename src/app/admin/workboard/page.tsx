@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogoutButton } from "@/components/admin/logout-button";
 import { Workboard, type WorkboardRow } from "@/components/admin/workboard";
 import type { StaffProfileOption } from "@/components/admin/request-ownership-section";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
@@ -34,7 +33,7 @@ export default async function AdminWorkboardPage() {
     supabase = await createSupabaseServerClient();
   } catch (error) {
     console.error("Workboard setup failed", { reason: error instanceof Error ? error.message : "unknown error" });
-    return <WorkboardShell error="Team workboard is not configured." showLogout={false} />;
+    return <WorkboardShell error="Team workboard is not configured." />;
   }
 
   const { data: userData } = await supabase.auth.getUser();
@@ -97,23 +96,17 @@ export default async function AdminWorkboardPage() {
   );
 }
 
-function WorkboardShell({ children, error, showLogout = true }: { children?: React.ReactNode; error?: string; showLogout?: boolean }) {
+function WorkboardShell({ children, error }: { children?: React.ReactNode; error?: string }) {
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="flex flex-wrap gap-4 text-sm font-semibold text-teal-700">
-              <Link href="/admin/overview">Overview</Link>
-              <Link href="/admin/requests">Requests</Link>
-              <Link href="/admin/document-review">Document Review</Link>
-            </div>
-            <p className="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Admin operations</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Admin operations</p>
             <h1 className="mt-2 text-3xl font-semibold text-navy-950">Team Workboard</h1>
             <p className="mt-3 max-w-3xl text-navy-650">Assign requests, prioritize deadlines, find blocked work, and focus each team member’s daily queue.</p>
             <div className="mt-3 flex gap-4 text-sm font-semibold text-teal-700"><Link href="/admin/requests?view=completed">Completed requests</Link><Link href="/admin/requests?view=archived">Archived requests</Link></div>
           </div>
-          {showLogout ? <LogoutButton /> : null}
         </div>
         <div className="mt-8">{error ? <div className="rounded-md border border-red-200 bg-red-50 p-5 text-sm text-red-700">{error}</div> : children}</div>
       </div>

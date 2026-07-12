@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogoutButton } from "@/components/admin/logout-button";
 import {
   OperationalAlerts,
   type OperationalRequest,
@@ -81,7 +80,7 @@ export default async function AdminOverviewPage() {
     console.error("Admin overview setup failed", {
       reason: error instanceof Error ? error.message : "unknown error",
     });
-    return <OverviewShell showLogout={false} error="Admin overview is not configured." />;
+    return <OverviewShell error="Admin overview is not configured." />;
   }
 
   const { data: userData } = await supabase.auth.getUser();
@@ -365,11 +364,9 @@ export default async function AdminOverviewPage() {
 function OverviewShell({
   children,
   error,
-  showLogout = true,
 }: {
   children?: React.ReactNode;
   error?: string;
-  showLogout?: boolean;
 }) {
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
@@ -384,7 +381,6 @@ function OverviewShell({
               A daily view of request progress, customer communication, document uploads, and team activity.
             </p>
           </div>
-          {showLogout ? <LogoutButton /> : null}
         </div>
 
         <div className="mt-8">

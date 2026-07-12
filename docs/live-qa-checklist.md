@@ -405,6 +405,27 @@ This section is retained as Phase 5 history. Use `docs/phase6-deployment-runbook
 - Pending Phase 6 release: `202607110002_phase6_customer_lifecycle.sql` — apply this consolidated migration once, before pushing Phase 6 application commits.
 - Permanent safety rule: never run `supabase/schema.sql` on the existing live Supabase project.
 
+## Phase 7A navigation acceptance
+
+Phase 7A uses separate public and authenticated chrome with no database migration. Verify active states on exact routes and nested request details, breadcrumbs with a screen reader or accessibility inspector, and both application drawers at 375 px, 768 px, and 1280 px.
+
+| # | Check | Expected result | Result |
+| ---: | --- | --- | --- |
+| 1 | Open `/`, `/services`, `/request`, and `/contact`. | Public header and footer render with service navigation, portal/admin login links, and start-request action. | — |
+| 2 | Open protected portal pages as a verified customer. | Public navigation does not render; the portal shell renders once. | — |
+| 3 | Open protected admin pages as admin/team. | Public navigation does not render; the admin shell renders once. | — |
+| 4 | Visit `/portal`, `/portal/requests`, and a request detail. | Profile & Company is visible and links to `/portal/profile`. | — |
+| 5 | Visit `/portal/profile`. | Breadcrumb and Back to Dashboard return to `/portal`. | — |
+| 6 | Visit `/portal/profile`. | My Requests links to `/portal/requests`. | — |
+| 7 | Use Start New Request in portal desktop and mobile navigation. | `/request` opens without losing the public request workflow. | — |
+| 8 | Visit every admin route and request detail. | Primary admin navigation is identical and no page-specific global navigation is duplicated. | — |
+| 9 | Check each admin route and nested request detail. | Exactly one item has `aria-current="page"`; request detail activates Requests. | — |
+| 10 | At 375 px and 768 px, open and close portal Menu by button, overlay, navigation, and Escape. | Drawer is usable, focus is visible, controls are labelled, and no horizontal overflow appears. | — |
+| 11 | At 375 px and 768 px, repeat for admin Menu. | Drawer and secondary actions remain accessible without clipped controls. | — |
+| 12 | Sign in as a customer and attempt admin URLs. | Server role guard redirects; admin links/data never render. | — |
+| 13 | Logout from both shells. | Customer returns to `/portal/login`; staff returns to `/admin/login`; protected pages require authentication again. | — |
+| 14 | Re-run Phase 6 signup, verification, profile, request lifecycle, messaging, upload, deliverable, completion, archive, restore, and submission checks. | Existing workflows and request persistence remain unchanged; no duplicate email behavior is introduced. | — |
+
 ## Phase 6 Final Acceptance Record
 
 Run this only after the consolidated migration, Auth URLs, and custom SMTP are configured. Record `Pass`, `Fail`, or `Blocked` plus an evidence link/reference in the Result column.

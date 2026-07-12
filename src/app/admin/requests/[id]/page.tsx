@@ -234,14 +234,9 @@ export default async function RequestDetailPage({ params }: RequestDetailPagePro
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm font-semibold text-teal-700">
-          <div className="flex flex-wrap gap-4">
-            <Link href="/admin/overview">Overview</Link>
-            <Link href="/admin/requests">Requests</Link>
-          </div>
-          <Link href="/admin/document-review">Document Review</Link>
-        </div>
-        <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_360px]">
+        <nav aria-label="Breadcrumb" className="mb-5 text-sm text-navy-600"><Link href="/admin/overview" className="font-semibold text-teal-700">Overview</Link><span aria-hidden="true"> / </span><Link href="/admin/requests" className="font-semibold text-teal-700">Requests</Link><span aria-hidden="true"> / </span><span aria-current="page">Request</span></nav>
+        <Link href="/admin/requests" className="mb-5 inline-flex rounded-md border border-navy-200 bg-white px-4 py-2 text-sm font-semibold text-navy-950">Back to Requests</Link>
+        <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">
             <section className="rounded-md border border-navy-100 bg-white p-6 shadow-sm">
               <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">

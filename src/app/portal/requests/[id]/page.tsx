@@ -5,7 +5,8 @@ import { checklistCategories } from "@/lib/document-checklist";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
-import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "../portal-ui";
+import { PortalConfigNotice, StatusBadge, formatDate } from "../portal-ui";
+import { AppPageHeader } from "@/components/app-page";
 import { LifecycleProgress } from "@/components/portal/lifecycle-progress";
 import { getCustomerNextAction, normalizeLifecycleStage } from "@/lib/request-lifecycle";
 import { finalDeliverableCategoryLabels, finalDeliverableCategories, type FinalDeliverableCategory } from "@/lib/final-deliverables";
@@ -179,21 +180,7 @@ export default async function PortalRequestDetailPage({ params }: RequestDetailP
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <Link href="/portal/requests" className="text-sm font-semibold text-teal-700">
-              Back to your requests
-            </Link>
-            <p className="mt-5 text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
-              Customer Portal
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold text-navy-950">{requestRow.company_name}</h1>
-            <p className="mt-2 text-sm text-navy-650">
-              {requestRow.main_service ?? "Service request"} · {formatDate(requestRow.created_at)}
-            </p>
-          </div>
-          <LogoutButtonShell />
-        </div>
+        <AppPageHeader eyebrow="Customer Portal" title={requestRow.company_name} description={`${requestRow.main_service ?? "Service request"} · ${formatDate(requestRow.created_at)}`} breadcrumbs={[{ label: "Dashboard", href: "/portal" }, { label: "My Requests", href: "/portal/requests" }, { label: "Request" }]} actions={<Link href="/portal/requests" className="rounded-md border border-navy-200 bg-white px-4 py-2 text-sm font-semibold text-navy-950">Back to My Requests</Link>} />
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]">
           <div className="space-y-6">

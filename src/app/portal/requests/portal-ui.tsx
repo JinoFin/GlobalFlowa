@@ -1,11 +1,3 @@
-import { PortalLogoutButton } from "@/components/portal/logout-button";
-
-export function LogoutButtonShell() {
-  return (
-    <PortalLogoutButton className="rounded-md border border-navy-200 bg-white px-4 py-2 text-sm font-semibold text-navy-950 hover:border-teal-400 hover:text-teal-700 disabled:opacity-50" />
-  );
-}
-
 export function StatusBadge({ status }: { status: string }) {
   const normalized = status.toLowerCase();
   const classes =

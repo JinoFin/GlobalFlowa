@@ -625,6 +625,16 @@ These fields and tasks are internal. Customer portal queries continue to use exp
 
 Never run `supabase/schema.sql` against the existing live database. If a future change needs database work, create and review a live-safe migration, apply it manually before deploying dependent code, and record the result in the live QA checklist.
 
+## Phase 7A authenticated application navigation
+
+Public pages retain the existing `SiteHeader` and `SiteFooter`. Every `/portal` and `/admin` route suppresses that public chrome, and the protected application pages use persistent nested portal or admin layouts without changing any URL. Login, signup, recovery, and password-update pages remain focused authentication screens rather than rendering protected navigation.
+
+The customer portal navigation is Dashboard (`/portal`), My Requests (`/portal/requests`), Profile & Company (`/portal/profile`), Start New Request (`/request`), Help / Contact (`/contact`), and Logout. Request detail pages inherit the My Requests active state. Dashboard, request list, profile, and request detail use consistent page headings and semantic breadcrumbs; Profile & Company is available throughout the portal and links back to both Dashboard and My Requests. The dashboard also prompts customers to complete important profile/company fields and exposes the new-request action.
+
+The staff navigation is Overview (`/admin/overview`), Requests (`/admin/requests`), Workboard (`/admin/workboard`), Document Review (`/admin/document-review`), and Services (`/admin/services`). Export CSV and Open Customer Portal remain secondary actions. Request detail inherits the Requests active state and includes breadcrumbs and Back to Requests. Both shells use a desktop sidebar and keyboard-accessible mobile drawer with visible focus, `aria-current`, labelled controls, Escape dismissal, and touch-sized targets.
+
+Authorization remains in each server-rendered protected page before protected data is loaded; the shared layouts do not replace role checks or expose internal data. Authenticated pages remain dynamic where customer/staff data is involved. Phase 7A requires no database migration and changes no RLS, grants, storage policies, or request-submission/email behavior. The isolated production `Request email failed after persistence` event remains a separate follow-up if reproducible; persistence is intentionally still independent of email delivery.
+
 ## Deployment runbook
 
 1. Pull the latest `main` with a fast-forward-only pull and confirm the worktree is clean.

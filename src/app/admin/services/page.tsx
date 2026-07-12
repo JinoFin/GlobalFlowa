@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { serviceCategories, services as localServices } from "@/lib/catalog";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
@@ -63,11 +62,7 @@ export default async function AdminServicesPage() {
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-wrap gap-4 text-sm font-semibold text-teal-700">
-          <Link href="/admin/overview">Overview</Link>
-          <Link href="/admin/requests">Requests</Link>
-        </div>
-        <div className="mt-5">
+        <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
             Admin
           </p>

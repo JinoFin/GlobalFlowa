@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogoutButtonShell, PortalConfigNotice } from "@/app/portal/requests/portal-ui";
+import { PortalConfigNotice } from "@/app/portal/requests/portal-ui";
+import { AppPageHeader } from "@/components/app-page";
 import { PortalProfileEditor } from "@/components/portal/profile-editor";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
@@ -64,10 +66,7 @@ export default async function PortalProfilePage() {
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Customer Profile</p><h1 className="mt-2 text-3xl font-semibold text-navy-950">Personal and company information</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-navy-650">Manage your account details and primary company profile securely.</p></div>
-          <LogoutButtonShell />
-        </div>
+        <AppPageHeader eyebrow="Customer Portal" title="Profile & Company" description="Manage your account details and primary company profile securely." breadcrumbs={[{ label: "Dashboard", href: "/portal" }, { label: "Profile & Company" }]} actions={<><Link href="/portal" className="rounded-md border border-navy-200 bg-white px-4 py-2 text-sm font-semibold text-navy-950">Back to Dashboard</Link><Link href="/portal/requests" className="rounded-md border border-navy-200 bg-white px-4 py-2 text-sm font-semibold text-navy-950">My Requests</Link></>} />
         <PortalProfileEditor
           loginEmail={user.email ?? ""}
           emailVerified={Boolean(user.email_confirmed_at)}

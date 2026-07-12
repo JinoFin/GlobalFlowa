@@ -5,7 +5,8 @@ import { claimRequestsForCurrentCustomer } from "@/lib/portal/claim-requests";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { getCustomerNextAction, lifecycleInfo, lifecycleProgress, normalizeLifecycleStage, type LifecycleStage } from "@/lib/request-lifecycle";
-import { LogoutButtonShell, PortalConfigNotice, formatDate } from "./requests/portal-ui";
+import { PortalConfigNotice, formatDate } from "./requests/portal-ui";
+import { AppPageHeader } from "@/components/app-page";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Customer Dashboard" };
@@ -29,11 +30,15 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   if (error) return <PortalConfigNotice message="Your dashboard could not be loaded." />;
   const rows = (requests ?? []) as DashboardRequest[];
   const ids = rows.map((row) => row.id);
-  const [{ data: checklist }, { data: messages }, { data: deliverables }] = ids.length ? await Promise.all([
-    dataClient.from("request_document_checklist").select("request_id, status, required").in("request_id", ids).eq("customer_visible", true),
-    dataClient.from("customer_messages").select("request_id, checklist_item_ids").in("request_id", ids).eq("customer_visible", true),
-    dataClient.from("request_files").select("request_id").in("request_id", ids).eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null),
-  ]) : [{ data: [] }, { data: [] }, { data: [] }];
+  const [requestData, profileResult, companyResult] = await Promise.all([
+    ids.length ? Promise.all([dataClient.from("request_document_checklist").select("request_id, status, required").in("request_id", ids).eq("customer_visible", true), dataClient.from("customer_messages").select("request_id, checklist_item_ids").in("request_id", ids).eq("customer_visible", true), dataClient.from("request_files").select("request_id").in("request_id", ids).eq("is_final_deliverable", true).eq("customer_visible", true).not("published_at", "is", null).is("deleted_at", null)]) : Promise.resolve([{ data: [] }, { data: [] }, { data: [] }]),
+    dataClient.from("profiles").select("full_name").eq("id", data.user.id).maybeSingle(),
+    dataClient.from("customer_companies").select("legal_name, country_code, contact_email").eq("owner_user_id", data.user.id).maybeSingle(),
+  ]);
+  const [{ data: checklist }, { data: messages }, { data: deliverables }] = requestData;
+  const profile = profileResult.data;
+  const company = companyResult.data;
+  const profileIncomplete = !profile?.full_name || !company?.legal_name || !company?.country_code || !company?.contact_email;
   const checklistByRequest = groupChecklist((checklist ?? []) as ChecklistItem[]);
   const actionMessages = new Set(((messages ?? []) as MessageItem[]).filter((message) => message.checklist_item_ids.length > 0).map((message) => message.request_id));
   const finalDocumentRequests = new Set((deliverables ?? []).map((file) => file.request_id as string));
@@ -48,8 +53,9 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const withFinalDocuments = cards.filter((card) => card.hasFinalDocuments);
   const archived = cards.filter((card) => card.stage === "archived");
 
-  return <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">Customer Portal</p><h1 className="mt-2 text-3xl font-semibold text-navy-950">Your dashboard</h1><p className="mt-3 text-sm text-navy-650">See what needs attention, what is progressing, and which final documents are ready.</p></div><LogoutButtonShell /></div>
+  return <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><AppPageHeader eyebrow="Customer Portal" title="Your dashboard" description="See what needs attention, what is progressing, and which final documents are ready." actions={<><Link href="/portal/profile" className="rounded-md border border-navy-200 bg-white px-4 py-2 text-sm font-semibold text-navy-950">Profile & Company</Link><Link href="/request" className="rounded-md bg-teal-500 px-4 py-2 text-sm font-semibold text-navy-950">Start New Request</Link></>} />
     {claimedCount > 0 ? <p role="status" className="mt-6 rounded-md border border-teal-200 bg-teal-50 p-4 text-sm font-semibold text-teal-800">We linked {claimedCount} existing request{claimedCount === 1 ? "" : "s"} to your account.</p> : null}
+    {profileIncomplete ? <section className="mt-6 rounded-lg border border-teal-200 bg-teal-50 p-5"><h2 className="font-semibold text-teal-950">Complete your profile to make future service requests faster.</h2><p className="mt-2 text-sm text-teal-800">Add your name, company legal name, country, and business contact email.</p><Link href="/portal/profile" className="mt-4 inline-flex rounded-md bg-navy-950 px-4 py-2 text-sm font-semibold text-white">Complete profile</Link></section> : null}
     <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Dashboard summary"><Summary label="Action required" value={needsAction.length} /><Summary label="Active requests" value={inProgress.length} /><Summary label="Completed" value={completed.length} /><Summary label="Final documents" value={withFinalDocuments.length} /></section>
     {!rows.length ? <div className="mt-8 rounded-md border border-dashed border-navy-200 bg-white p-8 text-center"><h2 className="text-xl font-semibold text-navy-950">No linked requests yet</h2><p className="mt-2 text-sm text-navy-650">Submit a new request or contact Globalflowa if an existing request used another email address.</p><div className="mt-4 flex justify-center gap-4 text-sm font-semibold text-teal-700"><Link href="/request">Submit request</Link><Link href="/contact">Contact Globalflowa</Link></div></div> : <div className="mt-8 space-y-10"><DashboardSection title="Needs your action" empty="Nothing needs your action right now." cards={needsAction} /><DashboardSection title="In progress" empty="No requests are currently in progress." cards={inProgress} /><DashboardSection title="Recently completed" empty="No completed requests yet." cards={completed.slice(0, 5)} /><DashboardSection title="Final documents available" empty="No final documents have been published yet." cards={withFinalDocuments} /><DashboardSection title="Archived requests" empty="No archived requests." cards={archived} secondary /></div>}
     <Link href="/portal/requests" className="mt-10 inline-flex text-sm font-semibold text-teal-700">View all requests</Link>

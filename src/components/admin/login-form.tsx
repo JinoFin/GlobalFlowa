@@ -27,7 +27,7 @@ export function AdminLoginForm() {
         throw signInError;
       }
 
-      router.push("/admin/requests");
+      router.push("/admin/overview");
       router.refresh();
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed.");

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogoutButtonShell, PortalConfigNotice, StatusBadge, formatDate } from "./portal-ui";
+import { PortalConfigNotice, StatusBadge, formatDate } from "./portal-ui";
+import { AppPageHeader } from "@/components/app-page";
 import { ClaimRequestsButton } from "@/components/portal/claim-requests-button";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
@@ -79,18 +80,7 @@ export default async function PortalRequestsPage({ searchParams }: { searchParam
   return (
     <div className="bg-navy-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700">
-              Customer Portal
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold text-navy-950">Your requests</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-navy-650">
-              Follow request progress, see document requirements, and upload missing or corrected files.
-            </p>
-          </div>
-          <LogoutButtonShell />
-        </div>
+        <AppPageHeader eyebrow="Customer Portal" title="My Requests" description="Follow request progress, see document requirements, and upload missing or corrected files." breadcrumbs={[{ label: "Dashboard", href: "/portal" }, { label: "My Requests" }]} actions={<Link href="/request" className="rounded-md bg-teal-500 px-4 py-2 text-sm font-semibold text-navy-950">Start New Request</Link>} />
 
         {Number.isSafeInteger(linkedCount) && linkedCount > 0 ? (
           <p className="mt-6 rounded-md border border-teal-200 bg-teal-50 p-4 text-sm font-semibold text-teal-800" role="status">We linked {linkedCount} existing request{linkedCount === 1 ? "" : "s"} to your account.</p>
