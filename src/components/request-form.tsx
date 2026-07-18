@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, FileUp } from "lucide-react";
 import { services, type QuestionType, type ServiceQuestion } from "@/lib/catalog";
 import {
@@ -47,7 +47,7 @@ const productFields: ServiceQuestion[] = [
   { key: "label_photos", label: "Label photos upload", type: "file", order: 10 },
   { key: "manual_upload", label: "Manual upload", type: "file", order: 11 },
   { key: "test_reports", label: "Test reports upload", type: "file", order: 12 },
-  { key: "declaration_of_conformity", label: "Declaration of Conformity upload", type: "file", order: 13 },
+  { key: "declaration_of_conformity", label: "Declaration of Conformity upload, if applicable", type: "file", order: 13 },
   { key: "other_files", label: "Other files upload", type: "file", order: 14 },
 ];
 
@@ -65,6 +65,7 @@ export function RequestForm() {
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [stage, setStage] = useState<"editing" | "confirming" | "submitting">("editing");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const validationSummaryRef = useRef<HTMLDivElement>(null);
 
   const selectedServiceObjects = useMemo(
     () => selectedServices.map((slug) => services.find((service) => service.slug === slug)).filter(Boolean),
@@ -111,6 +112,9 @@ export function RequestForm() {
     }
 
     setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      window.requestAnimationFrame(() => validationSummaryRef.current?.focus());
+    }
     return Object.keys(nextErrors).length === 0;
   }
 
@@ -142,7 +146,7 @@ export function RequestForm() {
         body: formData,
       });
 
-      const result = (await response.json()) as { submissionId?: string; error?: string };
+      const result = (await response.json()) as { submissionId?: string; notificationStatus?: "sent" | "partial" | "failed" | "not_configured"; error?: string };
       if (!response.ok) {
         throw new Error(result.error ?? "Submission failed.");
       }
@@ -164,7 +168,9 @@ export function RequestForm() {
       );
       window.localStorage.removeItem(draftKey);
       window.localStorage.removeItem(selectedServicesKey);
-      router.push(`/request/success?id=${result.submissionId ?? ""}`);
+      const successParams = new URLSearchParams({ id: result.submissionId ?? "" });
+      if (result.notificationStatus) successParams.set("notification", result.notificationStatus);
+      router.push(`/request/success?${successParams.toString()}`);
     } catch (error) {
       setStage("confirming");
       setSubmitError(error instanceof Error ? error.message : "Submission failed.");
@@ -183,16 +189,25 @@ export function RequestForm() {
               {stage === "confirming" ? "Confirm your request" : "Tell us what you need"}
             </h2>
           </div>
-          <div className="rounded-md bg-navy-50 px-4 py-2 text-sm font-semibold text-navy-700">
+          <div aria-live="polite" className="rounded-md bg-navy-50 px-4 py-2 text-sm font-semibold text-navy-700">
             {selectedServices.length} service{selectedServices.length === 1 ? "" : "s"} selected
           </div>
         </div>
       </div>
 
       {submitError ? (
-        <div className="m-5 flex gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <AlertCircle className="h-5 w-5 shrink-0" />
+        <div role="alert" className="m-5 flex gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertCircle className="h-5 w-5 shrink-0" aria-hidden="true" />
           {submitError}
+        </div>
+      ) : null}
+
+      {Object.keys(errors).length > 0 ? (
+        <div ref={validationSummaryRef} tabIndex={-1} role="alert" className="m-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800 outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+          <p className="font-semibold">Please review the highlighted fields.</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {Object.values(errors).map((error) => <li key={error}>{error}</li>)}
+          </ul>
         </div>
       ) : null}
 
@@ -207,10 +222,10 @@ export function RequestForm() {
         />
       ) : (
         <div className="space-y-10 p-5 sm:p-8">
-          <section>
-            <h3 className="text-xl font-semibold text-navy-950">Select services</h3>
+          <section aria-describedby={errors.selected_services ? "selected-services-error" : undefined}>
+            <h3 id="selected-services-heading" className="text-xl font-semibold text-navy-950">Select services</h3>
             {errors.selected_services ? (
-              <p className="mt-2 text-sm text-red-600">{errors.selected_services}</p>
+              <p id="selected-services-error" className="mt-2 text-sm text-red-600">{errors.selected_services}</p>
             ) : null}
             <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {services.map((service) => {
@@ -219,8 +234,9 @@ export function RequestForm() {
                   <button
                     key={service.slug}
                     type="button"
+                    aria-pressed={isSelected}
                     onClick={() => toggleService(service.slug)}
-                    className={`rounded-md border p-4 text-left transition ${
+                    className={`rounded-md border p-4 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 ${
                       isSelected
                         ? "border-teal-500 bg-teal-50"
                         : "border-navy-100 bg-white hover:border-teal-300"
@@ -230,7 +246,7 @@ export function RequestForm() {
                       <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
                         isSelected ? "border-teal-600 bg-teal-600" : "border-navy-200"
                       }`}>
-                        {isSelected ? <CheckCircle2 className="h-4 w-4 text-white" /> : null}
+                        {isSelected ? <CheckCircle2 className="h-4 w-4 text-white" aria-hidden="true" /> : null}
                       </span>
                       <span>
                         <span className="block font-semibold text-navy-950">{service.name}</span>
@@ -256,7 +272,7 @@ export function RequestForm() {
                   <div key={service.slug} className="rounded-md border border-navy-100 bg-navy-50 p-5">
                     <h4 className="font-semibold text-navy-950">{service.name}</h4>
                     <div className="mt-5 grid gap-4 md:grid-cols-2">
-                      {service.questions
+                      {[...service.questions]
                         .sort((a, b) => a.order - b.order)
                         .map((question) => (
                           <Field
@@ -343,23 +359,24 @@ function Field({
   onAnswer: (key: string, value: string | string[]) => void;
   onFiles: (key: string, fileList: FileList | null) => void;
 }) {
+  const fieldId = `request-field-${field.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const commonClasses =
     "mt-2 w-full rounded-md border border-navy-200 px-4 py-3 text-navy-950 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 
   return (
-    <label className={field.type === "textarea" || field.type === "file" ? "md:col-span-2" : ""}>
-      <span className="text-sm font-semibold text-navy-950">
+    <div className={field.type === "textarea" || field.type === "file" ? "md:col-span-2" : ""}>
+      <label htmlFor={field.type === "multiselect" ? undefined : fieldId} id={`${fieldId}-label`} className="text-sm font-semibold text-navy-950">
         {field.label}
-        {field.required ? <span className="text-red-600"> *</span> : null}
-      </span>
-      {renderInput(field, value, commonClasses, onAnswer, onFiles)}
-      {field.helpText ? <span className="mt-1 block text-xs text-navy-650">{field.helpText}</span> : null}
+        {field.required ? <span className="text-red-600"> *<span className="sr-only"> required</span></span> : null}
+      </label>
+      {renderInput(field, value, commonClasses, onAnswer, onFiles, fieldId, error)}
+      {field.helpText ? <span id={`${fieldId}-help`} className="mt-1 block text-xs text-navy-650">{field.helpText}</span> : null}
       {field.type === "file" && files.length > 0 ? (
         <div className="mt-3 space-y-2">
           {files.map((file) => (
             <div key={`${field.key}-${file.name}`} className="rounded-md bg-navy-50 p-3 text-sm text-navy-650">
               <div className="flex items-center gap-2">
-                <FileUp className="h-4 w-4 text-teal-700" />
+                <FileUp className="h-4 w-4 text-teal-700" aria-hidden="true" />
                 <span>{file.name}</span>
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-navy-100">
@@ -370,8 +387,8 @@ function Field({
           ))}
         </div>
       ) : null}
-      {error ? <span className="mt-1 block text-sm text-red-600">{error}</span> : null}
-    </label>
+      {error ? <span id={`${fieldId}-error`} className="mt-1 block text-sm text-red-600">{error}</span> : null}
+    </div>
   );
 }
 
@@ -381,11 +398,16 @@ function renderInput(
   commonClasses: string,
   onAnswer: (key: string, value: string | string[]) => void,
   onFiles: (key: string, fileList: FileList | null) => void,
+  fieldId: string,
+  error?: string,
 ) {
+  const describedBy = [field.helpText ? `${fieldId}-help` : null, error ? `${fieldId}-error` : null].filter(Boolean).join(" ") || undefined;
+  const accessibilityProps = { id: fieldId, required: Boolean(field.required), "aria-invalid": error ? true : undefined, "aria-describedby": describedBy };
   if (field.type === "textarea") {
     return (
       <textarea
         value={typeof value === "string" ? value : ""}
+        {...accessibilityProps}
         onChange={(event) => onAnswer(field.key, event.target.value)}
         className={`${commonClasses} min-h-32`}
       />
@@ -397,6 +419,7 @@ function renderInput(
     return (
       <select
         value={typeof value === "string" ? value : ""}
+        {...accessibilityProps}
         onChange={(event) => onAnswer(field.key, event.target.value)}
         className={commonClasses}
       >
@@ -413,11 +436,12 @@ function renderInput(
   if (field.type === "multiselect") {
     const selected = Array.isArray(value) ? value : [];
     return (
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+      <div role="group" aria-labelledby={`${fieldId}-label`} aria-describedby={describedBy} className="mt-2 grid gap-2 sm:grid-cols-2">
         {field.options?.map((option) => (
           <label key={option} className="flex items-center gap-2 rounded-md border border-navy-200 px-3 py-2 text-sm">
             <input
               type="checkbox"
+              name={fieldId}
               checked={selected.includes(option)}
               onChange={() =>
                 onAnswer(
@@ -439,6 +463,7 @@ function renderInput(
     return (
       <input
         type="file"
+        {...accessibilityProps}
         multiple
         onChange={(event) => onFiles(field.key, event.target.files)}
         className={commonClasses}
@@ -456,6 +481,7 @@ function renderInput(
   return (
     <input
       type={inputTypeByQuestionType[field.type] ?? "text"}
+      {...accessibilityProps}
       value={typeof value === "string" ? value : ""}
       onChange={(event) => onAnswer(field.key, event.target.value)}
       className={commonClasses}
@@ -551,7 +577,7 @@ function ChecklistPreview({
     <section className="rounded-md border border-navy-100 bg-white p-5">
       <h3 className="font-semibold text-navy-950">Document checklist preview</h3>
       <p className="mt-2 text-sm leading-6 text-navy-650">
-        Based on your selected services, these documents may be required. Our
+        Based on your selected services, these documents are commonly requested. Our
         team will review your uploaded documents and contact you if anything is
         missing or needs correction.
       </p>

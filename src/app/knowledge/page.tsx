@@ -5,6 +5,7 @@ import { knowledgeArticles } from "@/lib/catalog";
 
 export const metadata = {
   title: "Compliance Knowledge",
+  description: "Plain-English guides to German market-entry, product compliance, VAT and warehouse preparation, with official sources and visible review dates.",
 };
 
 export default function KnowledgePage() {

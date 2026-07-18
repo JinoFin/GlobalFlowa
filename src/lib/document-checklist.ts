@@ -348,7 +348,7 @@ const batteryTemplates = (serviceSlug: string) => [
   template(serviceSlug, "product_photos", "Product photos", "Product Documents", "Product photos showing the battery-powered item or battery packaging.", 50),
   template(serviceSlug, "label_photos", "Product label photos", "Product Documents", "Battery or product label photos showing markings and warnings.", 60),
   template(serviceSlug, "battery_quantity", "Estimated yearly battery quantity", "Compliance Documents", "Expected yearly battery quantity placed on the German market.", 70),
-  template(serviceSlug, "existing_battery_registration", "Existing battery registration if available", "Compliance Documents", "Existing BattG registration evidence or number, if already registered.", 80, { required_by_default: false }),
+  template(serviceSlug, "existing_battery_registration", "Existing battery registration if available", "Compliance Documents", "Existing battery registration or transition evidence under the BattDG framework, if already registered.", 80, { required_by_default: false }),
 ];
 
 const packagingTemplates = (serviceSlug: string) => [
@@ -365,7 +365,7 @@ const gpsrTemplates = (serviceSlug: string) => [
   template(serviceSlug, "product_photos", "Product photos", "Product Documents", "Clear product photos from relevant angles.", 20),
   template(serviceSlug, "label_photos", "Product label photos", "Product Documents", "Label and packaging photos showing safety, traceability, importer, and manufacturer details.", 30),
   template(serviceSlug, "declaration_of_conformity", "Declaration of Conformity if applicable", "Compliance Documents", "Declaration of Conformity for products where EU harmonization rules apply.", 40, { required_by_default: false, conditional_rule: { requiredWhen: ["electronics"] } }),
-  template(serviceSlug, "test_reports", "Test reports", "Compliance Documents", "Relevant test reports and certificates matching the product model.", 50, { required_by_default: false, conditional_rule: { requiredWhen: ["electronics"] } }),
+  template(serviceSlug, "test_reports", "Test reports", "Compliance Documents", "Relevant test reports matching the product model; reports are evidence, not automatic certification.", 50, { required_by_default: false, conditional_rule: { requiredWhen: ["electronics"] } }),
   template(serviceSlug, "user_manual", "User manual", "Product Documents", "User manual, safety instructions, and language versions currently available.", 60),
   template(serviceSlug, "risk_assessment", "Risk assessment if available", "Compliance Documents", "Risk assessment, safety file, or product safety analysis if available.", 70, { required_by_default: false }),
   template(serviceSlug, "manufacturer_address", "Manufacturer address", "Company Documents", "Full manufacturer name and address.", 80),

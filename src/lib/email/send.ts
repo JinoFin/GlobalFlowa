@@ -1,6 +1,4 @@
 import "server-only";
-
-import "server-only";
 import { Resend } from "resend";
 import { getServiceBySlug } from "@/lib/catalog";
 import { groupChecklistByCategory, type GeneratedChecklistItem } from "@/lib/document-checklist";
@@ -35,7 +33,7 @@ export async function sendRequestEmails({
   const resend = getResend();
   if (!resend) {
     console.warn("EMAIL_PROVIDER_API_KEY is not configured. Emails were not sent.");
-    return;
+    return { status: "not_configured" as const, failedCount: 2 };
   }
 
   const internalEmail = process.env.INTERNAL_NOTIFICATION_EMAIL ?? "info@globalflowa.com";
@@ -47,18 +45,21 @@ export async function sendRequestEmails({
       to: internalEmail,
       subject: `New service request: ${companyName} — ${mainService}`,
       text: buildInternalEmail(payload, submissionId, uploadedFiles, checklistItems),
+      idempotencyKey: `request-${submissionId}-internal`,
     }),
     sendTextEmail(resend, {
       to: payload.customer.email,
       subject: `We received your Globalflowa request — ${companyName}`,
       text: buildCustomerEmail(payload, submissionId, checklistItems),
+      idempotencyKey: `request-${submissionId}-customer`,
     }),
   ]);
 
   const failedDeliveries = deliveries.filter((delivery) => delivery.status === "rejected");
-  if (failedDeliveries.length > 0) {
-    throw new Error(`${failedDeliveries.length} request email delivery attempt(s) failed.`);
-  }
+  return {
+    status: failedDeliveries.length === 0 ? "sent" as const : failedDeliveries.length === deliveries.length ? "failed" as const : "partial" as const,
+    failedCount: failedDeliveries.length,
+  };
 }
 
 export async function sendCustomerUploadEmail({
@@ -299,12 +300,17 @@ function formatEmailStatus(status: string) {
 
 async function sendTextEmail(
   resend: Resend,
-  email: { to: string; subject: string; text: string },
+  email: { to: string; subject: string; text: string; idempotencyKey?: string },
 ) {
+  const { idempotencyKey, ...payload } = email;
+  const from = process.env.EMAIL_FROM?.trim();
+  if (!from) {
+    throw new Error("EMAIL_FROM is not configured.");
+  }
   const { error } = await resend.emails.send({
-    from: process.env.EMAIL_FROM ?? "Globalflowa Portal <onboarding@resend.dev>",
-    ...email,
-  });
+    from,
+    ...payload,
+  }, idempotencyKey ? { idempotencyKey } : undefined);
 
   if (error) {
     throw new Error(error.message || "Email provider rejected the message.");

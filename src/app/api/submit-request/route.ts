@@ -7,7 +7,6 @@ import {
   type UploadedFileSummary,
 } from "@/lib/document-checklist";
 import { sendRequestEmails } from "@/lib/email/send";
-import { getMissingEnvironmentVariables } from "@/lib/env";
 import { isVerifiedCustomer } from "@/lib/auth/customer";
 import { createSupabaseServerClient } from "@/lib/supabase/auth-server";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
@@ -70,20 +69,11 @@ export async function POST(request: NextRequest) {
   try {
     supabase = getSupabaseServiceClient();
   } catch (error) {
+    console.error("Request submission configuration unavailable", {
+      reason: error instanceof Error ? error.message : "unknown configuration error",
+    });
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Supabase is not configured for request submission.",
-        missing: getMissingEnvironmentVariables("server").filter((key) =>
-          ["SUPABASE_SERVICE_ROLE_KEY"].includes(key),
-        ).concat(
-          getMissingEnvironmentVariables("public").filter((key) =>
-            ["NEXT_PUBLIC_SUPABASE_URL"].includes(key),
-          ),
-        ),
-      },
+      { error: "Request submission is temporarily unavailable. Please contact Globalflowa if the problem continues." },
       { status: 503 },
     );
   }
@@ -304,16 +294,29 @@ export async function POST(request: NextRequest) {
     }] : []),
   ]);
 
-  try {
-    await sendRequestEmails({ payload, submissionId, uploadedFiles, checklistItems });
-  } catch (error) {
+  const emailDelivery = await sendRequestEmails({ payload, submissionId, uploadedFiles, checklistItems });
+  if (emailDelivery.status !== "sent") {
     console.error("Request email failed after persistence", {
       requestId: submissionId,
-      reason: error instanceof Error ? error.message : "unknown error",
+      status: emailDelivery.status,
+      failedCount: emailDelivery.failedCount,
     });
+    const { error: activityError } = await supabase.from("request_activity_log").insert({
+      request_id: submissionId,
+      actor_id: null,
+      actor_type: "system",
+      action: "request_notification_email_failed",
+      details: { status: emailDelivery.status, failed_count: emailDelivery.failedCount },
+    });
+    if (activityError) {
+      console.error("Request email failure activity could not be recorded", {
+        requestId: submissionId,
+        reason: activityError.message,
+      });
+    }
   }
 
-  return NextResponse.json({ ok: true, submissionId });
+  return NextResponse.json({ ok: true, submissionId, notificationStatus: emailDelivery.status });
 }
 
 function getClientIp(request: NextRequest) {

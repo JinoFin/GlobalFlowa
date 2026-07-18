@@ -2,6 +2,8 @@
 
 Professional B2B website and service request portal for Globalflowa, a Germany market-entry, compliance, warehouse, labeling, packing, and marketplace preparation partner for foreign sellers.
 
+Current launch status, evidence, blockers, and the next reviewed batch are maintained in [docs/release-readiness.md](docs/release-readiness.md). That record is authoritative; older phase notes describe historical milestones and do not by themselves establish production readiness.
+
 Customer lifecycle tracking is separate from internal request status. Allowed customer stages are `received`, `initial_review`, `waiting_for_documents`, `document_review`, `processing`, `external_processing`, `final_review`, `completed`, and `archived`. Admin/team users control the stage through a protected API; portal queries expose only the stage and update time. Missing-document messages and requested-document uploads apply the only automatic transitions, and never overwrite completed or archived stages. Customer next actions prioritize corrections, missing documents, action messages, and uploads under review before the general lifecycle stage.
 
 Phase 6E extends the existing `request_files` model and private `request-documents` bucket for final customer deliverables. Staff uploads are drafts by default; publication is explicit and reversible. A customer sees metadata only for published final deliverables on a request owned by their verified account, and downloads are authorized server-side before a 60-second signed URL is created. Signed URLs are never stored, the bucket remains private, unpublishing does not delete the object, and deletion targets the exact object while retaining soft-deleted metadata for audit. Supported uploads are PDF, PNG, JPEG, DOC, DOCX, XLS, XLSX, CSV, and TXT up to 20 MB, with both extension and MIME checks.
@@ -635,6 +637,29 @@ The staff navigation is Overview (`/admin/overview`), Requests (`/admin/requests
 
 Authorization remains in each server-rendered protected page before protected data is loaded; the shared layouts do not replace role checks or expose internal data. Authenticated pages remain dynamic where customer/staff data is involved. Phase 7A requires no database migration and changes no RLS, grants, storage policies, or request-submission/email behavior. The isolated production `Request email failed after persistence` event remains a separate follow-up if reproducible; persistence is intentionally still independent of email delivery.
 
+## Phase 7B official-source-backed content
+
+Public regulated service and knowledge content is backed by the structured registry in `src/lib/content-sources.ts`. Each source records its issuing authority, status, jurisdiction, legal identifier where applicable, official HTTPS URL, access date, current-version date where available and concise original notes. Service-specific scope, customer responsibility, limitations and source mappings live in `src/lib/service-content.ts`; knowledge-page scope and misconceptions live in `src/lib/knowledge-content.ts`.
+
+Every regulated service displays its official sources and “Last reviewed against the official sources listed on this page: 12 July 2026.” Static content is validated during the production build for missing or unknown sources, missing review dates, duplicate slugs/source IDs, insecure URLs, empty required sections and prohibited outcome claims. This milestone uses static TypeScript content only and requires no database migration.
+
+Source and maintenance records:
+
+- `docs/service-content-source-audit.md` — complete service/article inventory, claim corrections, sources and remaining uncertainty.
+- `docs/service-content-maintenance.md` — source hierarchy, update workflow, marketplace review and legislative/process review triggers.
+
+Globalflowa provides operational, documentation and coordination support. Public information is general and does not replace product-specific legal, tax, technical or authority advice. Marketplace policy is kept distinct from legislation, and warehouse inspection/relabeling is kept distinct from testing or certification.
+
+## Phase 7C user-facing quality and reliability
+
+The public header now uses a compact accessible mobile drawer instead of horizontal scrolling. Public, portal and admin navigation share labelled menus, visible focus, Escape dismissal, focus containment/return and touch-sized controls. A global skip link, reduced-motion handling, responsive source links, consistent official-source cards and a safe site-wide 404 improve practical accessibility without claiming certification.
+
+Service discovery now includes category jump links and clear regulated/operational/marketplace signals. Detail pages include compact on-page navigation, visible limitations and shared official-source presentation. Knowledge guides link back to the index and only to explicitly mapped related services. Request conversion preserves selected services/drafts, associates validation messages with fields, announces progress/errors and provides clear portal/contact next steps after persistence.
+
+Request notification failure never rolls back a saved request. Request emails use persisted-request idempotency keys, the success response exposes only a sanitized notification state, and a failure creates an admin-visible activity plus a request-ID log without provider payloads. The known production follow-up remains verification of a production-authorized `EMAIL_FROM` domain. No email credentials or live settings are changed.
+
+Run `npm run validate:phase7c` with the normal lint/build/audit checks. The full route inventory, responsive matrix, accessibility fixes, browser limitation and production acceptance steps are in [docs/phase7c-visual-accessibility-qa.md](docs/phase7c-visual-accessibility-qa.md). Phase 7C requires no database migration.
+
 ## Deployment runbook
 
 1. Pull the latest `main` with a fast-forward-only pull and confirm the worktree is clean.
@@ -651,6 +676,7 @@ Authorization remains in each server-rendered protected page before protected da
 ```bash
 npm run lint
 npm run build
+npm run validate:phase7c
 npm audit --audit-level=moderate
 ```
 

@@ -32,7 +32,7 @@ export const checkerQuestions: CheckerQuestion[] = [
   { key: "contains_electronics", label: "Do your products contain electronics?", type: "yes_no" },
   { key: "contains_batteries", label: "Do your products contain batteries?", type: "yes_no" },
   { key: "packaged_products", label: "Do you sell packaged products?", type: "yes_no" },
-  { key: "needs_responsible_person", label: "Do you need an EU Responsible Person?", type: "yes_no" },
+  { key: "needs_responsible_person", label: "Have you been asked to identify an EU responsible economic operator?", type: "yes_no" },
   { key: "has_weee", label: "Do you already have WEEE registration?", type: "yes_no" },
   { key: "has_battery_registration", label: "Do you already have Battery registration?", type: "yes_no" },
   { key: "has_lucid", label: "Do you already have LUCID / Packaging registration?", type: "yes_no" },
@@ -83,15 +83,15 @@ export function getRecommendations(answers: CheckerAnswers): Recommendation[] {
   }
 
   if (answers.contains_batteries === true && answers.has_battery_registration !== true) {
-    add("battery-battg-registration", "Products containing, shipping with, or separately selling batteries may need BattG registration support.");
+    add("battery-battg-registration", "Products containing, shipping with, or separately selling batteries need assessment under the EU Batteries Regulation and Germany's BattDG.");
   }
 
   if (answers.needs_responsible_person === true || (isLikelyOutsideEu && sellsPhysicalProducts)) {
     add(
       "gpsr-eu-responsible-person",
       isLikelyOutsideEu
-        ? "A non-EU seller placing physical consumer products in Germany should review GPSR and EU Responsible Person requirements."
-        : "You indicated a Responsible Person need, so product documents and GPSR evidence should be checked.",
+        ? "A non-EU seller placing consumer products in Germany should review product scope, product-specific law and the applicable EU economic-operator route."
+        : "You indicated an economic-operator request, so the product scope, roles and documents should be checked.",
     );
   }
 

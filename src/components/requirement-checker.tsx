@@ -56,7 +56,7 @@ export function RequirementChecker() {
             Reset
           </button>
         </div>
-        <div className="mt-4 h-2 rounded-full bg-navy-100">
+        <div role="progressbar" aria-label="Requirement checker progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={isComplete ? 100 : progress} className="mt-4 h-2 rounded-full bg-navy-100">
           <div className="h-2 rounded-full bg-teal-500 transition-all" style={{ width: `${isComplete ? 100 : progress}%` }} />
         </div>
       </div>
@@ -77,8 +77,9 @@ export function RequirementChecker() {
                     <button
                       key={option.label}
                       type="button"
+                      aria-pressed={answers[activeQuestion.key] === option.value}
                       onClick={() => updateAnswer(activeQuestion.key, option.value)}
-                      className={`rounded-md border px-5 py-4 text-left font-semibold ${
+                      className={`rounded-md border px-5 py-4 text-left font-semibold outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 ${
                         answers[activeQuestion.key] === option.value
                           ? "border-teal-500 bg-teal-50 text-teal-800"
                           : "border-navy-100 bg-white text-navy-950"
@@ -119,6 +120,7 @@ export function RequirementChecker() {
               ) : (
                 <input
                   type="text"
+                  aria-label={activeQuestion.label}
                   value={(answers[activeQuestion.key] as string) ?? ""}
                   onChange={(event) => updateAnswer(activeQuestion.key, event.target.value)}
                   className="w-full rounded-md border border-navy-200 px-4 py-3 text-navy-950 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
@@ -149,13 +151,14 @@ export function RequirementChecker() {
         <div className="p-5 sm:p-8">
           <div className="max-w-3xl">
             <h2 className="text-3xl font-semibold text-navy-950">
-              You likely need these services
+              You may need these services
             </h2>
             <p className="mt-3 text-navy-650">
               These recommendations are a practical starting point. Globalflowa
               will review your submitted details before confirming the final
               path.
             </p>
+            <p className="mt-3 text-sm leading-6 text-navy-650">The checker provides general operational guidance, not legal or tax advice. Product, business-model and sales-route facts can change the result.</p>
           </div>
           <div className="mt-8 grid gap-5 lg:grid-cols-2">
             {recommendations.map((recommendation) => {
@@ -171,7 +174,7 @@ export function RequirementChecker() {
                       <p className="mt-2 text-sm leading-6 text-navy-650">{recommendation.reason}</p>
                     </div>
                   </div>
-                  <p className="mt-5 text-sm font-semibold text-navy-950">Required documents</p>
+                  <p className="mt-5 text-sm font-semibold text-navy-950">Documents commonly requested</p>
                   <ul className="mt-2 space-y-2 text-sm text-navy-650">
                     {recommendation.requiredDocuments.slice(0, 5).map((document) => (
                       <li key={document}>- {document}</li>

@@ -5,6 +5,7 @@ import { serviceCategories, services } from "@/lib/catalog";
 
 export const metadata = {
   title: "Services",
+  description: "Germany market-entry, compliance coordination, warehouse preparation and marketplace document support reviewed against current official sources.",
 };
 
 export default function ServicesPage() {
@@ -24,6 +25,7 @@ export default function ServicesPage() {
             required, which documents to prepare, and how the request is
             reviewed.
           </p>
+          <p className="mt-4 max-w-3xl text-sm leading-6 text-navy-200">Regulated content was last reviewed against the official sources shown on each service page on 12 July 2026.</p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <ButtonLink href="/check-requirements" className="bg-teal-500 text-navy-950 hover:bg-teal-300">
               Check What You Need
@@ -37,13 +39,20 @@ export default function ServicesPage() {
 
       <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl space-y-14">
+          <nav aria-label="Service categories" className="flex flex-wrap gap-2 rounded-lg border border-navy-100 bg-navy-50 p-3">
+            {serviceCategories.map((category) => (
+              <a key={category.key} href={`#${category.key}`} className="inline-flex min-h-11 items-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-navy-700 shadow-sm outline-none hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-500">
+                {category.title}
+              </a>
+            ))}
+          </nav>
           {serviceCategories.map((category) => {
             const categoryServices = services.filter(
               (service) => service.category === category.key,
             );
 
             return (
-              <section key={category.key}>
+              <section key={category.key} id={category.key} className="scroll-mt-28">
                 <SectionHeader
                   eyebrow={category.title}
                   title={category.summary}
