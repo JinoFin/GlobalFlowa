@@ -512,8 +512,8 @@ Use this checklist before moving to Phase 2:
 9. Deploy a Preview build.
 10. Run the live QA checklist against the Preview URL.
 11. Confirm Supabase Auth URL settings include the Preview URL and production domain.
-12. Promote the validated Preview deployment or deploy Production from `main`.
-13. Run the live QA checklist again against the production URL.
+12. Do not deploy Production automatically from `main`. Follow the immutable-commit release gate below and promote only the verified Preview deployment for the explicitly approved commit.
+13. Run the live QA checklist again against the production URL after the approved manual promotion.
 
 Build command:
 
@@ -529,15 +529,16 @@ Start command:
 npm run start
 ```
 
-Optional Vercel CLI flow:
+Optional Vercel CLI flow for local and Preview verification only:
 
 ```bash
 vercel link
 vercel env pull .env.local --yes
 npm run build
 vercel deploy
-vercel deploy --prod
 ```
+
+A production deployment is a separate, explicit release decision. Do not run a production deployment command from a routine branch or `main` push.
 
 ## Real environment test instructions
 
@@ -662,14 +663,16 @@ Run `npm run validate:phase7c` with the normal lint/build/audit checks. The full
 
 ## Deployment runbook
 
-1. Pull the latest `main` with a fast-forward-only pull and confirm the worktree is clean.
-2. Run `npm run lint`, `npm run build`, `git diff --check`, and `npm audit --audit-level=moderate` when registry access is available.
-3. Apply only `supabase/migrations/202607110001_phase5_operations_management.sql` manually to the existing live project before pushing Phase 5. Verify the new request columns, normalized priority constraint, indexes, `internal_tasks`, grants, and admin/team RLS. Never run `schema.sql` on live.
-4. Push the reviewed commits to GitHub without force pushing.
-5. Wait for the matching Vercel deployment to finish and confirm the deployment uses the expected commit and environment.
-6. Smoke test `/`, `/request`, `/admin/login`, `/admin/overview`, `/admin/requests`, `/admin/document-review`, `/admin/workboard`, `/portal/login`, and `/portal/requests`.
-7. Run the production acceptance workflow in [docs/live-qa-checklist.md](docs/live-qa-checklist.md#manual-live-acceptance-test).
-8. If a release fails, stop new acceptance activity, roll Vercel back to the last accepted deployment, and assess database compatibility before reverting code. Do not reverse a database migration until a reviewed down-migration/data plan exists.
+Automatic Vercel deployments from `main` are disabled. Production releases use an immutable-commit gate:
+
+1. Select an exact commit SHA already merged into protected `main`; record that SHA and the release approval in the release-readiness issue before any production action.
+2. Confirm the SHA's GitHub Actions run passed `Quality`, `Production build`, and `Dependency audit`, and confirm every required migration has a separately reviewed, recorded production plan. Never run `schema.sql` on live.
+3. Create a temporary release branch that points directly to the approved SHA without adding a commit or force-pushing. The branch produces a Vercel Preview while `main` remains deployment-disabled.
+4. Confirm the Preview deployment metadata names the exact approved SHA, then run responsive/browser smoke checks and the production acceptance workflow in [docs/live-qa-checklist.md](docs/live-qa-checklist.md#manual-live-acceptance-test) against that immutable deployment.
+5. Record the Preview deployment ID, commit SHA, CI run, test evidence, approver, and rollback target. Stop if any value is missing or mismatched.
+6. Only after an explicit owner release decision, manually promote that exact verified Preview deployment ID to Production. Never promote “latest,” rebuild an unrecorded tree, or enable automatic `main` deployments for convenience.
+7. Confirm Production reports the approved SHA and deployment ID, then smoke test `/`, `/request`, `/admin/login`, `/admin/overview`, `/admin/requests`, `/admin/document-review`, `/admin/workboard`, `/portal/login`, and `/portal/requests`.
+8. If a release fails, stop new acceptance activity, restore the recorded Vercel rollback target, and assess database compatibility before reverting code. Do not reverse a database migration until a reviewed down-migration/data plan exists.
 
 ## Useful commands
 
