@@ -16,7 +16,8 @@ This document is the single source of truth for production-readiness work. A suc
 - Review branch: `codex/phase7-release-governance`.
 - Production Supabase project: healthy in `eu-central-1`, PostgreSQL 17.
 - Production migration ledger: empty in the connected Supabase migration history.
-- Production deployment status: `READY`; automatic deployments from `main` were active at the start of this run.
+- Current `main` commit: `4a93d8fc0ac67a8fa7ba4f0e84ed7f97b3342853` (PR #5 merge commit).
+- Production deployment status: `READY` on deployment `dpl_8cmTztRVSgSb92aH7XjsBQxzrAhK` and commit `36eb16d0e159d04d71bceaacb98ef36ae5c74e53`; automatic deployments from `main` are disabled and the post-merge gate was verified without changing Production.
 
 ## Run log
 
@@ -59,11 +60,13 @@ This document is the single source of truth for production-readiness work. A suc
 - Live Vercel runtime review: one request-email failure was recorded during the seven-day window. A historical workboard error preceded the current Phase 5 schema.
 - Live homepage: returned successfully over HTTPS with HSTS, but the requested application security headers are not yet present.
 - Signed-in GitHub verification: the active `main` rule requires `Quality`, `Production build`, and `Dependency audit`, an up-to-date branch, and resolved conversations; the approval requirement is deliberately disabled for the single-owner repository, while bypass, force pushes, and deletion remain disabled.
+- PR #5 merged through the protected GitHub path at 2026-07-18 10:52:10 UTC as merge commit `4a93d8fc0ac67a8fa7ba4f0e84ed7f97b3342853`; the remote `main` ref resolves to that exact commit.
+- Post-merge GitHub Actions run [29641575698](https://github.com/JinoFin/GlobalFlowa/actions/runs/29641575698) completed successfully for the `main` push and exact merge commit.
+- Post-merge Vercel inspection found no deployment for `4a93d8fc0ac67a8fa7ba4f0e84ed7f97b3342853`. The newest deployment remained the PR Preview `dpl_AVhkP43mLpgkExvUWbtB3DAASYJo` (target `null`, commit `3ba73b9e803b87d7e869099b4f71117534c2dfc8`), and the newest Production deployment remained `dpl_8cmTztRVSgSb92aH7XjsBQxzrAhK` on `36eb16d0e159d04d71bceaacb98ef36ae5c74e53`.
 
 #### Remaining blockers
 
-- [Issue #1](https://github.com/JinoFin/GlobalFlowa/issues/1): Branch protection is active and verified. The issue remains open until PR #5 is reviewed and merged, the Vercel `main` deployment gate is verified after merge, and the documented manual release/promotion gate is exercised.
-- The Vercel `main` deployment gate has passed review-branch Preview checks but must still be verified after merge; production must not be promoted as part of this batch.
+- [Issue #1](https://github.com/JinoFin/GlobalFlowa/issues/1): Acceptance evidence is complete: stable CI and protected-branch controls are active, PR #5 merged normally, the Vercel `main` gate prevented a post-merge Production deployment, review-branch Previews remain available, and the immutable-commit manual promotion gate is documented in the README. No Production promotion was performed as part of this batch.
 - [Issue #3](https://github.com/JinoFin/GlobalFlowa/issues/3): Production request email is not reliable. Implement and test a durable outbox, retries, delivery status, and worker alerts.
 - [Issue #2](https://github.com/JinoFin/GlobalFlowa/issues/2): Public request and upload endpoints still need durable rate limiting, bot protection, strict file-count/type/size validation, quarantine preparation, persistence idempotency, and transactional object/record cleanup.
 - [Issue #4](https://github.com/JinoFin/GlobalFlowa/issues/4): Production Supabase schema is ahead of its empty migration ledger. Reconciliation needs a reviewed, checksum-recorded, live-safe procedure and an explicit release gate.
@@ -95,9 +98,9 @@ This document is the single source of truth for production-readiness work. A suc
 
 #### Pull request
 
-- Draft PR [#5 — Recover Phase 7 and add release governance](https://github.com/JinoFin/GlobalFlowa/pull/5).
-- The recovered application and release-control tree was introduced in `b5c2320`; subsequent commits only record verification evidence. GitHub is authoritative for the current immutable PR head.
-- CI and Vercel checks passed. The PR remains unmerged and production remains on `36eb16d`.
+- PR [#5 — Recover Phase 7 and add release governance](https://github.com/JinoFin/GlobalFlowa/pull/5) merged on 18 July 2026 through the protected branch using the repository's normal merge-commit method.
+- PR head: `3ba73b9e803b87d7e869099b4f71117534c2dfc8`; merge commit and current `main`: `4a93d8fc0ac67a8fa7ba4f0e84ed7f97b3342853`.
+- CI passed before and after merge. The Vercel gate created no deployment for the merge commit, and Production remained on `36eb16d0e159d04d71bceaacb98ef36ae5c74e53`.
 
 #### Recommended next batch
 
@@ -111,7 +114,7 @@ The platform remains **not ready** until every item below has current evidence:
 
 - [ ] No critical or high-severity security finding remains.
 - [x] Pull requests and the `Quality`, `Production build`, and `Dependency audit` checks are enforced on `main`; current branches, conversation resolution, no bypass, and no force-push/deletion were verified in GitHub. The approval requirement was deliberately disabled because the single-owner repository has no eligible second reviewer.
-- [ ] Production deploys only through an explicit reviewed release gate.
+- [x] Automatic Production deployment from `main` is disabled and verified; the README defines an immutable-commit Preview-verification and explicit manual-promotion gate.
 - [ ] Production migrations and checksums are recorded and reproducible.
 - [ ] Customer A versus Customer B and role-boundary tests pass against a connected environment.
 - [ ] Request, upload, replacement, document review, final delivery, and archive journeys pass end to end.
