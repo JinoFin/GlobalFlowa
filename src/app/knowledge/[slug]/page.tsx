@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { ButtonLink } from "@/components/button-link";
-import { getKnowledgeArticle, knowledgeArticles } from "@/lib/catalog";
+import { OfficialSources } from "@/components/official-sources";
+import { getKnowledgeArticle, getServiceBySlug, knowledgeArticles } from "@/lib/catalog";
+import { getContentSources } from "@/lib/content-sources";
+import { getKnowledgeContent } from "@/lib/knowledge-content";
 
 type KnowledgeDetailPageProps = {
   params: Promise<{ slug: string }>;
@@ -16,6 +19,7 @@ export async function generateMetadata({ params }: KnowledgeDetailPageProps) {
 
   return {
     title: article ? article.title : "Knowledge",
+    description: article?.summary,
   };
 }
 
@@ -26,6 +30,8 @@ export default async function KnowledgeDetailPage({ params }: KnowledgeDetailPag
   if (!article) {
     notFound();
   }
+  const content = getKnowledgeContent(article.slug);
+  const sources = getContentSources(content.sourceIds);
 
   return (
     <div className="bg-white">
@@ -38,6 +44,8 @@ export default async function KnowledgeDetailPage({ params }: KnowledgeDetailPag
             {article.title}
           </h1>
           <p className="mt-6 text-lg leading-8 text-navy-100">{article.summary}</p>
+          <p className="mt-4 text-sm leading-6 text-navy-200">Reviewed against the official sources listed below. Requirements can change and depend on the product, business model and sales route.</p>
+          <ButtonLink href="/knowledge" variant="secondary" className="mt-7 border-white/20 bg-white/10 text-white hover:bg-white hover:text-navy-950">Back to knowledge</ButtonLink>
         </div>
       </section>
 
@@ -45,10 +53,16 @@ export default async function KnowledgeDetailPage({ params }: KnowledgeDetailPag
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.7fr_0.3fr]">
           <div className="space-y-8">
             <ContentBlock title="What it is" body={article.whatItIs} />
-            <ContentBlock title="Who needs it" body={article.whoNeedsIt} />
-            <ListBlock title="Required documents" items={article.requiredDocuments} />
-            <ListBlock title="Common mistakes" items={article.commonMistakes} />
+            <ContentBlock title="Applicable scope" body={content.applicableScope} />
+            <ContentBlock title="Who may need it" body={article.whoNeedsIt} />
+            <ListBlock title="Documents commonly requested" items={article.requiredDocuments} />
+            <ListBlock title="Common misconceptions" items={content.misconceptions} />
+            <ListBlock title="Steps before selling" items={content.stepsBeforeSelling} />
+            <ListBlock title="Ongoing obligations" items={content.ongoingObligations} />
+            <ListBlock title="Common practical mistakes" items={article.commonMistakes} />
             <ContentBlock title="How Globalflowa helps" body={article.howGlobalflowaHelps} />
+            <section className="rounded-md border border-amber-200 bg-amber-50 p-6"><h2 className="text-2xl font-semibold text-amber-950">Important limitation</h2><p className="mt-4 leading-7 text-amber-900">{content.disclaimer}</p></section>
+            {sources.length ? <OfficialSources sources={sources} compact /> : <section className="rounded-lg border border-navy-100 bg-navy-50 p-6"><h2 className="text-xl font-semibold text-navy-950">Operational guide</h2><p className="mt-3 text-sm leading-6 text-navy-650">No legal claim is made on this warehouse guide. Product acceptance and platform/carrier instructions are reviewed for each request. Last reviewed: 12 July 2026.</p></section>}
           </div>
           <aside className="h-fit rounded-md border border-navy-100 bg-navy-50 p-6">
             <h2 className="text-xl font-semibold text-navy-950">Need help with this?</h2>
@@ -56,9 +70,13 @@ export default async function KnowledgeDetailPage({ params }: KnowledgeDetailPag
               Submit a structured request so Globalflowa can review your
               company, products, documents, and deadline.
             </p>
-            <ButtonLink href="/request" className="mt-6 w-full">
-              Start request
-            </ButtonLink>
+            <div className="mt-5 space-y-2">
+              {content.relatedServiceSlugs.map((serviceSlug) => {
+                const service = getServiceBySlug(serviceSlug);
+                return service ? <ButtonLink key={serviceSlug} href={`/services/${service.slug}`} variant="secondary" className="w-full">{service.name}</ButtonLink> : null;
+              })}
+            </div>
+            <ButtonLink href={content.relatedServiceSlugs[0] ? `/request?service=${content.relatedServiceSlugs[0]}` : "/request"} className="mt-6 w-full">Start request</ButtonLink>
           </aside>
         </div>
       </article>

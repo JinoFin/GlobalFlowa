@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ButtonLink } from "@/components/button-link";
+import { PublicMobileNavigation } from "@/components/public-mobile-navigation";
 
 const navItems = [
   { href: "/", label: "Home" },
@@ -14,7 +15,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-navy-100 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-3">
+        <Link href="/" className="flex min-w-0 items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-teal-500">
           <span className="flex h-10 w-10 items-center justify-center rounded-md bg-navy-950 text-lg font-bold text-white">
             G
           </span>
@@ -37,24 +38,12 @@ export function SiteHeader() {
             Admin Login
           </Link>
         </nav>
-        <div className="hidden items-center gap-3 sm:flex">
+        <div className="hidden items-center gap-3 lg:flex">
           <ButtonLink href="/portal/login" variant="secondary">Customer Portal</ButtonLink>
           <ButtonLink href="/request">Start Request</ButtonLink>
         </div>
+        <PublicMobileNavigation items={navItems} />
       </div>
-      <nav className="flex gap-4 overflow-x-auto border-t border-navy-100 px-4 py-3 text-sm font-medium text-navy-700 lg:hidden">
-        {navItems.map((item) => (
-          <Link key={item.href} href={item.href} className="shrink-0">
-            {item.label}
-          </Link>
-        ))}
-        <Link href="/admin/login" className="shrink-0">
-          Admin Login
-        </Link>
-        <Link href="/portal/login" className="shrink-0">
-          Customer Portal
-        </Link>
-      </nav>
     </header>
   );
 }

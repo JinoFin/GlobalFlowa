@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { ButtonLink } from "@/components/button-link";
+import { OfficialSources } from "@/components/official-sources";
 import { getCategory, getServiceBySlug, services } from "@/lib/catalog";
+import { getContentSources } from "@/lib/content-sources";
+import { getServiceContent } from "@/lib/service-content";
 
 type ServiceDetailPageProps = {
   params: Promise<{ slug: string }>;
@@ -16,6 +19,7 @@ export async function generateMetadata({ params }: ServiceDetailPageProps) {
 
   return {
     title: service ? service.name : "Service",
+    description: service?.shortDescription,
   };
 }
 
@@ -28,6 +32,8 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
   }
 
   const category = getCategory(service.category);
+  const content = getServiceContent(service);
+  const sources = getContentSources(content.sourceIds);
 
   return (
     <div className="bg-white">
@@ -42,6 +48,7 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
           <p className="mt-6 max-w-3xl text-lg leading-8 text-navy-100">
             {service.shortDescription}
           </p>
+          {content.regulated ? <p className="mt-4 max-w-3xl text-sm leading-6 text-navy-200">Reviewed against the official sources listed below. Requirements can change and depend on the product, business model and sales route.</p> : null}
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <ButtonLink href={`/request?service=${service.slug}`} className="bg-teal-500 text-navy-950 hover:bg-teal-300">
               Request this service
@@ -54,22 +61,34 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
       </section>
 
       <section className="px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="mx-auto max-w-7xl">
+          <nav aria-label="On this page" className="mb-8 rounded-lg border border-navy-100 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">On this page</p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-navy-700">
+              <a href="#service-overview" className="rounded-sm outline-none hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-500">Overview and scope</a>
+              <a href="#process" className="rounded-sm outline-none hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-500">Process</a>
+              <a href="#limitations" className="rounded-sm outline-none hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-500">Limitations</a>
+              <a href="#request-questions" className="rounded-sm outline-none hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-500">Request questions</a>
+              {sources.length ? <a href="#official-sources" className="rounded-sm outline-none hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-500">Official sources</a> : null}
+            </div>
+          </nav>
+        </div>
+        <div id="service-overview" className="mx-auto grid max-w-7xl scroll-mt-28 gap-8 lg:grid-cols-2">
           <div className="rounded-md border border-navy-100 bg-navy-50 p-6">
-            <h2 className="text-2xl font-semibold text-navy-950">
-              Who needs this service
-            </h2>
+            <h2 className="text-2xl font-semibold text-navy-950">Service overview</h2>
+            <p className="mt-4 leading-7 text-navy-650">{content.scope}</p>
+            <h3 className="mt-6 text-lg font-semibold text-navy-950">Who may need this</h3>
             <p className="mt-4 leading-7 text-navy-650">{service.whoNeedsIt}</p>
+            <h3 className="mt-6 text-lg font-semibold text-navy-950">When it may not apply</h3>
+            <p className="mt-3 leading-7 text-navy-650">{content.whoMayNotNeedIt}</p>
           </div>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            <InfoList title="Required information" items={service.requiredInformation} />
-            <InfoList title="Required documents" items={service.requiredDocuments} />
-          </div>
+          <div className="grid gap-6"><InfoList title="What Globalflowa handles" items={content.whatGlobalflowaDoes} /><InfoList title="What the customer remains responsible for" items={content.customerResponsibilities} /></div>
         </div>
       </section>
 
-      <section className="bg-navy-50 px-4 py-16 sm:px-6 lg:px-8">
+      <section className="px-4 pb-16 sm:px-6 lg:px-8"><div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-2"><InfoList title="Information needed" items={service.requiredInformation} /><InfoList title="Documents commonly requested" items={service.requiredDocuments} /></div></section>
+
+      <section id="process" className="scroll-mt-28 bg-navy-50 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <h2 className="text-3xl font-semibold tracking-tight text-navy-950">
             Process steps
@@ -87,7 +106,9 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
         </div>
       </section>
 
-      <section className="px-4 py-16 sm:px-6 lg:px-8">
+      <section id="limitations" className="scroll-mt-28 px-4 py-16 sm:px-6 lg:px-8"><div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-3"><InfoList title="Ongoing obligations" items={content.ongoingObligations} /><InfoList title="Important limitations" items={content.importantLimitations} /><InfoList title="Common mistakes" items={content.commonMistakes} /></div><div className="mx-auto mt-8 max-w-7xl rounded-lg border border-amber-200 bg-amber-50 p-5 sm:p-6"><h2 className="text-xl font-semibold text-amber-950">Legal basis and authority</h2><p className="mt-3 text-sm leading-6 text-amber-900">{content.legalBasis} {content.authority}</p><p className="mt-3 text-sm leading-6 text-amber-900">{content.disclaimer}</p></div></section>
+
+      <section id="request-questions" className="scroll-mt-28 px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <h2 className="text-3xl font-semibold tracking-tight text-navy-950">
             Smart request questions
@@ -97,7 +118,7 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
             information where relevant.
           </p>
           <div className="mt-8 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {service.questions
+            {[...service.questions]
               .sort((a, b) => a.order - b.order)
               .map((question) => (
                 <div key={question.key} className="rounded-md border border-navy-100 bg-white p-4">
@@ -114,6 +135,8 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
           </div>
         </div>
       </section>
+
+      <OfficialSources sources={sources} />
     </div>
   );
 }

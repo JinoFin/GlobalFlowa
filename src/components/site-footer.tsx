@@ -3,6 +3,7 @@ import Link from "next/link";
 export function SiteFooter() {
   return (
     <footer className="border-t border-navy-100 bg-navy-950 text-white">
+      <div className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 lg:px-8"><p className="border-b border-white/10 pb-8 text-sm leading-6 text-navy-200">Globalflowa provides operational, documentation and coordination support. Information on this website is general and does not replace product-specific legal, tax, technical or authority advice.</p></div>
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
         <div>
           <p className="text-xl font-semibold">Globalflowa</p>

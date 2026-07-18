@@ -426,6 +426,49 @@ Phase 7A uses separate public and authenticated chrome with no database migratio
 | 13 | Logout from both shells. | Customer returns to `/portal/login`; staff returns to `/admin/login`; protected pages require authentication again. | — |
 | 14 | Re-run Phase 6 signup, verification, profile, request lifecycle, messaging, upload, deliverable, completion, archive, restore, and submission checks. | Existing workflows and request persistence remain unchanged; no duplicate email behavior is introduced. | — |
 
+## Phase 7B service-content acceptance
+
+| # | Check | Expected result | Result |
+| ---: | --- | --- | --- |
+| 1 | Open `/services` and every generated service route. | All 29 services render and regulated services show official sources and the 12 July 2026 review date. | — |
+| 2 | Open `/knowledge` and all seven articles. | Articles show scope, misconceptions, steps, obligations, limitations and official sources; the warehouse guide is explicitly operational. | — |
+| 3 | Check WEEE pages. | German registration is not described as EU-wide; stiftung ear is the entrusted authority/register, not a certification body. | — |
+| 4 | Check battery pages and the legacy slug. | Public title uses EU Batteries Regulation / BattDG; BattG transition and limited battery-passport scope are accurate. | — |
+| 5 | Check packaging pages. | LUCID registration, system participation and reporting are distinct. | — |
+| 6 | Check GPSR/document-review pages. | Product-specific law remains relevant; importer/authorised representative differ; CE, DoC and test reports are not universal certificates. | — |
+| 7 | Check VAT, bookkeeping, formation and address pages. | Wording is fact-dependent and separates Globalflowa coordination from qualified tax, legal, notarial and authority functions. | — |
+| 8 | Check every marketplace page and external platform link. | Policy is separated from law, review date is visible and no acceptance/reinstatement outcome is promised. | — |
+| 9 | Check all warehouse pages. | Pricing factors, customer instructions, restricted-product review and certification limitations are visible. | — |
+| 10 | Use the requirement checker and request form. | Current battery/economic-operator wording appears; DoC is “if applicable”; uploads remain optional unless existing intake logic requires them. | — |
+| 11 | Submit a request and inspect admin Services. | Existing payload compatibility is preserved and the admin view uses current local names/questions/review dates without a migration. | — |
+| 12 | Run content validation, lint, build, audit, diff and secret scans. | All pass and no migration is created. | — |
+
+## Phase 7C visual, accessibility and conversion acceptance
+
+Record screenshots/evidence at 375, 768 and 1280 px and repeat overflow checks at 320, 1024 and 1440 px.
+
+| # | Check | Expected result | Result |
+| ---: | --- | --- | --- |
+| 1 | Open the public menu at 320/375/768 px. | No horizontal strip exists; drawer is labelled, fits the viewport and exposes every public link/action. | — |
+| 2 | Keyboard-test public, portal and admin drawers. | Tab stays inside; Shift+Tab wraps; Escape closes; focus returns to Menu; no trap remains after navigation. | — |
+| 3 | Use the global skip link on public and authenticated pages. | Focus moves to main content with a visible indicator. | — |
+| 4 | Open `/services` at all target widths. | 29 readable cards are separated by category; type/trust signal, audience and detail action are clear. | — |
+| 5 | Open WEEE, BattDG, GPSR, DoC, VAT, formation, warehouse inspection and Amazon pages. | Sections, limitations, source titles, legal identifiers, review date and selected-service CTA wrap without overflow. | — |
+| 6 | Open every knowledge article. | Guide styling differs from service sales pages; Back to knowledge and explicitly mapped related services work. | — |
+| 7 | Complete the checker by keyboard. | Progress is announced; results say “You may need”; legal/tax-advice limitation and service links are visible. | — |
+| 8 | Trigger request-form validation. | Summary receives focus; required fields and errors are programmatically associated; draft and selected service remain. | — |
+| 9 | Submit one controlled request. | Button prevents repeat clicks, persistence returns a submission ID and success gives portal/signup/contact next steps. | — |
+| 10 | Simulate/observe request-email failure after persistence. | Saved request remains; UI does not claim notification success; admin activity/log includes safe request ID/status only. | — |
+| 11 | Retry delivery for the same persisted request ID in a controlled test. | Deterministic internal/customer idempotency keys prevent duplicate provider sends for that request ID. | — |
+| 12 | Verify production Resend configuration. | `EMAIL_FROM` uses a verified domain; internal and customer recipients receive the controlled request emails. | — |
+| 13 | Check Portal Dashboard, Requests, Profile and request detail at 375/768/1280 px. | Profile is always discoverable, active state is correct, no public chrome/duplicate logout/overflow appears. | — |
+| 14 | Check all six admin pages at 375/768/1280 px. | One shared shell, correct active state, secondary Export, usable filters/tables/actions and no public chrome. | — |
+| 15 | Open Admin Services. | Name, slug, category, content type, review date, source count and validation status render read-only without raw errors. | — |
+| 16 | Inspect metadata and robots. | Public titles are unique/accurate; service slugs remain stable; portal/admin pages are no-index. | — |
+| 17 | Inspect console and document width on sampled routes. | No serious console error and `scrollWidth <= clientWidth` at every target width. | — |
+| 18 | Re-run Phase 6 authorization and workflow tests. | Cross-customer/internal data stays protected; lifecycle, uploads, deliverables, completion/archive and APIs still work. | — |
+| 19 | Run Phase 7C/static/content/build/audit/secret/diff checks. | All pass; 53 routes/pages compile; no migration/schema/policy change exists. | — |
+
 ## Phase 6 Final Acceptance Record
 
 Run this only after the consolidated migration, Auth URLs, and custom SMTP are configured. Record `Pass`, `Fail`, or `Blocked` plus an evidence link/reference in the Result column.
