@@ -49,7 +49,7 @@ This document is the single source of truth for production-readiness work. A suc
 - `npm audit --audit-level=moderate`: passed with 0 vulnerabilities after network access was allowed.
 - `git diff --check`: passed after this batch's edits.
 - Phase 7B/7C database diff: none.
-- GitHub Actions run 2: `Quality`, `Production build`, and `Dependency audit` all passed on Node.js 24 for PR head `97a764f`.
+- Latest review-branch GitHub Actions run: `Quality`, `Production build`, and `Dependency audit` all passed on Node.js 24; the exact immutable head and logs are linked from the pull-request checks.
 - Vercel Preview deployment: `READY`; Vercel reported the deployment check as successful.
 - Preview browser smoke: homepage, Services, request, customer login, and admin login passed at 375 px, 768 px, and desktop without document-level horizontal overflow. Each sampled page had one H1 and one main landmark.
 - Preview mobile navigation: labelled dialog opened, exposed its expanded state, closed on Escape, and restored focus to the trigger.
@@ -86,14 +86,14 @@ This document is the single source of truth for production-readiness work. A suc
 
 #### Preview deployment
 
-- `READY`: `https://globalflowa-cwchbj40j-jinofins-projects.vercel.app` for PR head `97a764f`.
+- `READY`: the Vercel review-branch Preview for the current pull-request head; the exact immutable deployment is linked from the pull-request check.
 - Vercel check passed. Public-route responsive and interaction smoke checks passed as recorded above.
 - No production deployment or domain promotion was performed.
 
 #### Pull request
 
 - Draft PR [#5 — Recover Phase 7 and add release governance](https://github.com/JinoFin/GlobalFlowa/pull/5).
-- Current PR head: `97a764f`; the recovered application and release-control tree was introduced in `b5c2320`, and the follow-up commit records verification evidence only.
+- The recovered application and release-control tree was introduced in `b5c2320`; subsequent commits only record verification evidence. GitHub is authoritative for the current immutable PR head.
 - CI and Vercel checks passed. The PR remains unmerged and production remains on `36eb16d`.
 
 #### Recommended next batch
