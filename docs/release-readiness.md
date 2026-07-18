@@ -49,12 +49,17 @@ This document is the single source of truth for production-readiness work. A suc
 - `npm audit --audit-level=moderate`: passed with 0 vulnerabilities after network access was allowed.
 - `git diff --check`: passed after this batch's edits.
 - Phase 7B/7C database diff: none.
+- GitHub Actions run 1: `Quality`, `Production build`, and `Dependency audit` all passed on Node.js 24.
+- Vercel Preview deployment: `READY`; Vercel reported the deployment check as successful.
+- Preview browser smoke: homepage, Services, request, customer login, and admin login passed at 375 px, 768 px, and desktop without document-level horizontal overflow. Each sampled page had one H1 and one main landmark.
+- Preview mobile navigation: labelled dialog opened, exposed its expanded state, closed on Escape, and restored focus to the trigger.
+- Preview visual review: desktop and mobile homepage hero/layout rendered without clipping. No application-origin console errors were observed; the only captured warnings/errors came from the preceding Vercel authentication screen and Google sign-in client.
 - Live Vercel runtime review: one request-email failure was recorded during the seven-day window. A historical workboard error preceded the current Phase 5 schema.
 - Live homepage: returned successfully over HTTPS with HSTS, but the requested application security headers are not yet present.
 
 #### Remaining blockers
 
-- [Issue #1](https://github.com/JinoFin/GlobalFlowa/issues/1): GitHub branch protection/ruleset must require `Quality`, `Production build`, and `Dependency audit`, require pull requests, and block force pushes/deletions. Do not claim the checks are required until the repository setting is verified.
+- [Issue #1](https://github.com/JinoFin/GlobalFlowa/issues/1): A `main` protection rule was fully prepared to require one approval, dismiss stale approvals, require current branches, require `Quality`, `Production build`, and `Dependency audit`, resolve conversations, block bypasses, and keep force-push/deletion disabled. GitHub required sudo-mode reauthentication at save time, so the rule is not yet verified active and must not be claimed as enforced.
 - The Vercel `main` deployment gate must be verified on the preview/review flow and after merge; production must not be promoted as part of this batch.
 - [Issue #3](https://github.com/JinoFin/GlobalFlowa/issues/3): Production request email is not reliable. Implement and test a durable outbox, retries, delivery status, and worker alerts.
 - [Issue #2](https://github.com/JinoFin/GlobalFlowa/issues/2): Public request and upload endpoints still need durable rate limiting, bot protection, strict file-count/type/size validation, quarantine preparation, persistence idempotency, and transactional object/record cleanup.
@@ -81,11 +86,15 @@ This document is the single source of truth for production-readiness work. A suc
 
 #### Preview deployment
 
-- Pending branch publication and Vercel preview creation.
+- `READY`: `https://globalflowa-huoa8es8n-jinofins-projects.vercel.app` for review commit `b5c2320`.
+- Vercel check passed. Public-route responsive and interaction smoke checks passed as recorded above.
+- No production deployment or domain promotion was performed.
 
 #### Pull request
 
-- Pending branch publication.
+- Draft PR [#5 — Recover Phase 7 and add release governance](https://github.com/JinoFin/GlobalFlowa/pull/5).
+- Review commit: `b5c2320`.
+- CI and Vercel checks passed. The PR remains unmerged and production remains on `36eb16d`.
 
 #### Recommended next batch
 
