@@ -36,6 +36,7 @@ This document is the single source of truth for production-readiness work. A suc
 - Added `merge_group` coverage so required checks remain compatible with a future merge queue.
 - Added a reusable `npm run typecheck` script.
 - Added a reviewed Vercel Git gate that disables automatic deployments from `main` while preserving preview deployments from review branches.
+- Activated and verified the classic `main` protection rule in the signed-in GitHub UI: pull requests, one approval, stale-approval dismissal, current branches, all three CI checks, conversation resolution, no administrator bypass, and no force-push/deletion.
 - Created this release-readiness tracker.
 - Created focused GitHub issues [#1](https://github.com/JinoFin/GlobalFlowa/issues/1), [#2](https://github.com/JinoFin/GlobalFlowa/issues/2), [#3](https://github.com/JinoFin/GlobalFlowa/issues/3), and [#4](https://github.com/JinoFin/GlobalFlowa/issues/4) for the confirmed release blockers.
 
@@ -56,11 +57,12 @@ This document is the single source of truth for production-readiness work. A suc
 - Preview visual review: desktop and mobile homepage hero/layout rendered without clipping. No application-origin console errors were observed; the only captured warnings/errors came from the preceding Vercel authentication screen and Google sign-in client.
 - Live Vercel runtime review: one request-email failure was recorded during the seven-day window. A historical workboard error preceded the current Phase 5 schema.
 - Live homepage: returned successfully over HTTPS with HSTS, but the requested application security headers are not yet present.
+- Signed-in GitHub verification: the active `main` rule requires `Quality`, `Production build`, and `Dependency audit`, plus one approval, an up-to-date branch, and resolved conversations; bypass, force pushes, and deletion are disabled.
 
 #### Remaining blockers
 
-- [Issue #1](https://github.com/JinoFin/GlobalFlowa/issues/1): A `main` protection rule was fully prepared to require one approval, dismiss stale approvals, require current branches, require `Quality`, `Production build`, and `Dependency audit`, resolve conversations, block bypasses, and keep force-push/deletion disabled. GitHub required sudo-mode reauthentication at save time, so the rule is not yet verified active and must not be claimed as enforced.
-- The Vercel `main` deployment gate must be verified on the preview/review flow and after merge; production must not be promoted as part of this batch.
+- [Issue #1](https://github.com/JinoFin/GlobalFlowa/issues/1): Branch protection is active and verified. The issue remains open until PR #5 is reviewed and merged, the Vercel `main` deployment gate is verified after merge, and the documented manual release/promotion gate is exercised.
+- The Vercel `main` deployment gate has passed review-branch Preview checks but must still be verified after merge; production must not be promoted as part of this batch.
 - [Issue #3](https://github.com/JinoFin/GlobalFlowa/issues/3): Production request email is not reliable. Implement and test a durable outbox, retries, delivery status, and worker alerts.
 - [Issue #2](https://github.com/JinoFin/GlobalFlowa/issues/2): Public request and upload endpoints still need durable rate limiting, bot protection, strict file-count/type/size validation, quarantine preparation, persistence idempotency, and transactional object/record cleanup.
 - [Issue #4](https://github.com/JinoFin/GlobalFlowa/issues/4): Production Supabase schema is ahead of its empty migration ledger. Reconciliation needs a reviewed, checksum-recorded, live-safe procedure and an explicit release gate.
@@ -107,7 +109,7 @@ This document is the single source of truth for production-readiness work. A suc
 The platform remains **not ready** until every item below has current evidence:
 
 - [ ] No critical or high-severity security finding remains.
-- [ ] Pull requests and all required CI checks are enforced on `main`.
+- [x] Pull requests and the `Quality`, `Production build`, and `Dependency audit` checks are enforced on `main`; one approval, current branches, conversation resolution, no bypass, and no force-push/deletion were verified in GitHub.
 - [ ] Production deploys only through an explicit reviewed release gate.
 - [ ] Production migrations and checksums are recorded and reproducible.
 - [ ] Customer A versus Customer B and role-boundary tests pass against a connected environment.
