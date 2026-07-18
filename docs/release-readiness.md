@@ -36,7 +36,8 @@ This document is the single source of truth for production-readiness work. A suc
 - Added `merge_group` coverage so required checks remain compatible with a future merge queue.
 - Added a reusable `npm run typecheck` script.
 - Added a reviewed Vercel Git gate that disables automatic deployments from `main` while preserving preview deployments from review branches.
-- Activated and verified the classic `main` protection rule in the signed-in GitHub UI: pull requests, one approval, stale-approval dismissal, current branches, all three CI checks, conversation resolution, no administrator bypass, and no force-push/deletion.
+- Activated and verified the classic `main` protection rule in the signed-in GitHub UI: pull requests, current branches, all three CI checks, conversation resolution, no administrator bypass, and no force-push/deletion.
+- After confirming that the single-owner repository has no eligible second reviewer, deliberately removed the approval requirement while retaining every other protection listed above.
 - Created this release-readiness tracker.
 - Created focused GitHub issues [#1](https://github.com/JinoFin/GlobalFlowa/issues/1), [#2](https://github.com/JinoFin/GlobalFlowa/issues/2), [#3](https://github.com/JinoFin/GlobalFlowa/issues/3), and [#4](https://github.com/JinoFin/GlobalFlowa/issues/4) for the confirmed release blockers.
 
@@ -57,7 +58,7 @@ This document is the single source of truth for production-readiness work. A suc
 - Preview visual review: desktop and mobile homepage hero/layout rendered without clipping. No application-origin console errors were observed; the only captured warnings/errors came from the preceding Vercel authentication screen and Google sign-in client.
 - Live Vercel runtime review: one request-email failure was recorded during the seven-day window. A historical workboard error preceded the current Phase 5 schema.
 - Live homepage: returned successfully over HTTPS with HSTS, but the requested application security headers are not yet present.
-- Signed-in GitHub verification: the active `main` rule requires `Quality`, `Production build`, and `Dependency audit`, plus one approval, an up-to-date branch, and resolved conversations; bypass, force pushes, and deletion are disabled.
+- Signed-in GitHub verification: the active `main` rule requires `Quality`, `Production build`, and `Dependency audit`, an up-to-date branch, and resolved conversations; the approval requirement is deliberately disabled for the single-owner repository, while bypass, force pushes, and deletion remain disabled.
 
 #### Remaining blockers
 
@@ -109,7 +110,7 @@ This document is the single source of truth for production-readiness work. A suc
 The platform remains **not ready** until every item below has current evidence:
 
 - [ ] No critical or high-severity security finding remains.
-- [x] Pull requests and the `Quality`, `Production build`, and `Dependency audit` checks are enforced on `main`; one approval, current branches, conversation resolution, no bypass, and no force-push/deletion were verified in GitHub.
+- [x] Pull requests and the `Quality`, `Production build`, and `Dependency audit` checks are enforced on `main`; current branches, conversation resolution, no bypass, and no force-push/deletion were verified in GitHub. The approval requirement was deliberately disabled because the single-owner repository has no eligible second reviewer.
 - [ ] Production deploys only through an explicit reviewed release gate.
 - [ ] Production migrations and checksums are recorded and reproducible.
 - [ ] Customer A versus Customer B and role-boundary tests pass against a connected environment.
